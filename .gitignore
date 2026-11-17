@@ -38,3 +38,4 @@ keystore.properties
 
 # Local release artifacts (CI uses $RUNNER_TEMP/dist, never the repo dist*)
 dist*/
+md_*.json
