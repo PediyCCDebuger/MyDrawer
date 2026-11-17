@@ -20,6 +20,7 @@ import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
+import com.pediycc.mydrawer.BuildConfig
 
 /**
  * 设置页：按原版 Smart Drawer「应用网格 / 安全 / 程式列表」分组复刻，全中文。
@@ -240,7 +241,7 @@ fun SettingsScreen(
             }
             item {
                 Text(
-                    "MyDrawer 2.0.0 · 仿 Smart Drawer 1.0.3 界面与功能，独立重写，未复制原版代码。",
+                    "MyDrawer ${BuildConfig.VERSION_NAME} · 仿 Smart Drawer 1.0.3 界面与功能，独立重写，未复制原版代码。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(16.dp),

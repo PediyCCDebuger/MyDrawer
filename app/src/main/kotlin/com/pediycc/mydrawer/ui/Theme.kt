@@ -37,10 +37,12 @@ fun MyDrawerTheme(content: @Composable () -> Unit) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-            // 真正透明：让抽屉半透明背景透出壁纸。
+            // 真正透明：窗口背景、状态栏、导航栏全部透明，让抽屉背后的壁纸透出来。
             window.setBackgroundDrawable(
                 android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT),
             )
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
         }
     }
     MaterialTheme(

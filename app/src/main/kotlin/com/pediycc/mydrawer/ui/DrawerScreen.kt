@@ -16,7 +16,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.LocalTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,6 +29,19 @@ import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
+
+/**
+ * 抽屉里的文字都直接叠在壁纸上。仿原版 Launcher 做法：白字 + 黑色投影，
+ * 这样无论浅色还是深色壁纸都清晰可读（原版 drawer.xml 文字色 #FFFFFFFF，靠阴影保证对比）。
+ */
+@Composable
+private fun wallpaperTextStyle(): TextStyle = LocalTextStyle.current.copy(
+    shadow = Shadow(color = Color(0xCC000000), offset = Offset(0f, 1f), blurRadius = 4f),
+)
+
+/** 透明背景时只铺一层极淡的暗幕压住壁纸高光，仍可清楚透出壁纸；不透明时用深色实底。 */
+private fun scrimColorOf(transparent: Boolean): Color =
+    if (transparent) Color(0x2E000000) else Color(0xFF101217)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +75,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
         }
     }
 
-    val scrimColor = if (state.prefs.transparentBackground) Color(0xB3000000) else Color(0xFF101217)
+    val scrimColor = scrimColorOf(state.prefs.transparentBackground)
 
     Box(Modifier.fillMaxSize().background(scrimColor)) {
         Scaffold(
@@ -72,6 +89,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
                             if (state.selectMode) "已选择 ${state.selected.size} 项"
                             else vm.categoryLabel(state.selectedCategory),
                             color = Color.White,
+                            style = wallpaperTextStyle(),
                         )
                     },
                     navigationIcon = {
@@ -233,9 +251,10 @@ private fun AppArea(
             value = state.query,
             onValueChange = { vm.setQuery(it) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            placeholder = { Text("搜索应用", color = Color(0xFFB9C0C8)) },
+            placeholder = { Text("搜索应用", color = Color(0xFFE0E0E0), style = wallpaperTextStyle()) },
             singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null, tint = Color(0xFFB9C0C8)) },
+            textStyle = wallpaperTextStyle().copy(fontSize = 15.sp),
+            leadingIcon = { Icon(Icons.Filled.Search, null, tint = Color.White) },
             trailingIcon = {
                 if (state.query.isNotEmpty()) {
                     IconButton(onClick = { vm.setQuery("") }) {
@@ -246,8 +265,11 @@ private fun AppArea(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFF8FB4FF),
-                unfocusedBorderColor = Color(0xFF66707B),
+                focusedBorderColor = Color(0xFFBBD2FF),
+                unfocusedBorderColor = Color(0xAAFFFFFF),
+                focusedContainerColor = Color(0x33000000),
+                unfocusedContainerColor = Color(0x22000000),
+                cursorColor = Color.White,
             ),
         )
         if (state.loading) {
@@ -282,7 +304,8 @@ private fun CategoryRail(
         Modifier
             .fillMaxHeight()
             .width(if (prefs.showCategoryLabels) 76.dp else 58.dp)
-            .background(Color(0x33000000))
+            // 原版 catlist_bg = #20FFFFFF（白色 12.5% 磨砂），比黑底更透、更接近原版
+            .background(Color(0x20FFFFFF))
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -298,7 +321,7 @@ private fun CategoryRail(
                 Modifier
                     .size(48.dp)
                     .background(
-                        if (selected == "all") Color(0x668FB4FF) else Color(0x33FFFFFF),
+                        if (selected == "all") Color(0xAA8FB4FF) else Color(0x33FFFFFF),
                         MaterialTheme.shapes.small,
                     ),
                 contentAlignment = Alignment.Center,
@@ -306,7 +329,7 @@ private fun CategoryRail(
                 Icon(Icons.Filled.Apps, "全部", tint = Color.White, modifier = Modifier.size(26.dp))
             }
             if (prefs.showCategoryLabels) {
-                Text("全部", color = Color.White, fontSize = 11.sp, maxLines = 1)
+                Text("全部", color = Color.White, fontSize = 11.sp, maxLines = 1, style = wallpaperTextStyle())
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -322,7 +345,7 @@ private fun CategoryRail(
                     Modifier
                         .size(48.dp)
                         .background(
-                            if (catSelected) Color(0x668FB4FF) else Color.Transparent,
+                            if (catSelected) Color(0xAA8FB4FF) else Color(0x1AFFFFFF),
                             MaterialTheme.shapes.small,
                         ),
                     contentAlignment = Alignment.Center,
@@ -341,6 +364,7 @@ private fun CategoryRail(
                         fontSize = 11.sp,
                         maxLines = 1,
                         textAlign = TextAlign.Center,
+                        style = wallpaperTextStyle(),
                     )
                 }
             }
@@ -366,11 +390,12 @@ private fun AppGrid(
             stickyHeader {
                 Text(
                     vm.categoryLabel(catId),
-                    color = Color(0xFFBFD4FF),
+                    color = Color(0xFFDCE8FF),
                     fontSize = 14.sp,
+                    style = wallpaperTextStyle(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0x88000000))
+                        .background(Color(0x44000000))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
@@ -416,7 +441,7 @@ private fun AppTile(
         modifier = modifier
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(vertical = 8.dp, horizontal = 2.dp)
-            .background(if (selected) Color(0x558FB4FF) else Color.Transparent, MaterialTheme.shapes.small),
+            .background(if (selected) Color(0x998FB4FF) else Color.Transparent, MaterialTheme.shapes.small),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         DrawerIcon(
@@ -431,6 +456,7 @@ private fun AppTile(
                 app.label,
                 color = Color.White,
                 fontSize = 12.sp,
+                style = wallpaperTextStyle(),
                 maxLines = 2,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),

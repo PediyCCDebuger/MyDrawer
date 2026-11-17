@@ -20,7 +20,7 @@ Smart Drawer（Smart Launcher Team，包名 `ginlemon.smartdrawer`）在 2021 �
 - **搜索**：按应用名或包名实时过滤。
 - **隐藏应用**：长按图标隐藏，设置里可显示系统应用。
 - **配置备份**：右上角软盘图标 = 导出，时钟图标 = 导入；开放 JSON 备份（分类覆盖、隐藏列表、排序、图标、外观），v1 旧备份仍可导入。
-- **自动更新**：检查 GitHub Release 下载安装；代理支持直连、本机 `127.0.0.1:1080` 及多个公共代理。
+- **自动更新**：默认直连检测 GitHub Release，可选公共反向代理（gh-proxy.org / gh-proxy.com / ghfast.top / gh.acmsz.top / github.chenc.dev / gh.monlor.com）下载升级；不含本机代理。
 
 ## 技术
 
@@ -43,7 +43,9 @@ Smart Drawer（Smart Launcher Team，包名 `ginlemon.smartdrawer`）在 2021 �
 ./gradlew testDebugUnitTest   # 单元测试
 ```
 
-Release 由 CI 在打标签时构建。
+Release 由 CI 在打标签时构建，使用仓库内置的固定签名（`.github/signing/release.keystore.b64`），确保各版本签名一致、可原地覆盖升级。
+
+**注意**：v1.0.0 / v2.0.0 使用过临时签名，与 v2.1.0 起的固定签名不同。若设备上已安装旧版，需先卸载旧版再安装 v2.1.0，之后的升级即可直接覆盖。升级前可用右上角软盘图标导出配置备份，装好后用时钟图标导入。
 
 ## 许可
 

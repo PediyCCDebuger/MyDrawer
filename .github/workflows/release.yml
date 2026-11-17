@@ -41,8 +41,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Use a stable self-contained debug-style signing key so released APKs are installable.
-      - name: Restore or create signing key
+      # 固定签名：优先用仓库内 .github/signing/release.keystore.b64（保证每次构建同一把密钥，
+      # 老版本可被新版本覆盖升级）；secrets 若配置则优先级更高。切勿改回每次临时生成。
+      - name: Restore fixed signing key
         id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.MYDRAWER_KEYSTORE_BASE64 }}
@@ -51,22 +52,31 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
             echo "password=$SECRET_PASSWORD" >> "$GITHUB_OUTPUT"
-          else
-            keytool -genkeypair -v \
-              -keystore "$RUNNER_TEMP/release.jks" \
-              -alias mydrawer -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass mydrawer -keypass mydrawer \
-              -dname "CN=MyDrawer, OU=Personal, O=Personal, L=CN, ST=CN, C=CN"
+            echo "alias=mydrawer" >> "$GITHUB_OUTPUT"
+          elif [ -f .github/signing/release.keystore.b64 ]; then
+            base64 --decode .github/signing/release.keystore.b64 > "$RUNNER_TEMP/release.jks"
             echo "password=mydrawer" >> "$GITHUB_OUTPUT"
+            echo "alias=mydrawer" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No signing key found (checked secrets and .github/signing/release.keystore.b64)"
+            exit 1
           fi
 
       - name: Test and build signed release
         env:
           MYDRAWER_STORE_FILE: ${{ runner.temp }}/release.jks
           MYDRAWER_STORE_PASSWORD: ${{ steps.signing.outputs.password }}
-          MYDRAWER_KEY_ALIAS: mydrawer
+          MYDRAWER_KEY_ALIAS: ${{ steps.signing.outputs.alias }}
           MYDRAWER_KEY_PASSWORD: ${{ steps.signing.outputs.password }}
         run: ./gradlew testDebugUnitTest assembleRelease
+
+      - name: Verify signatures
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          for apk in app/build/outputs/apk/release/*.apk; do
+            echo "$apk"
+            "$apksigner" verify --print-certs "$apk" | grep "SHA-256" | head -1
+          done
 
       - name: Publish release
         env:

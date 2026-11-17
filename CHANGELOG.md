@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.0] - 2026-11-17
+
+按实机反馈修正界面可读性、签名与更新代理：
+
+- **界面重做**：抽屉背景真正透明，可透出壁纸；参照原版 `catlist_bg = #20FFFFFF` 把分类栏改为白色磨砂；所有叠在壁纸上的文字加黑色投影（仿原版 Launcher 白字做法），浅色/深色壁纸上均清晰可读；搜索框加深色底衬保证输入可见。
+- **固定签名**：仓库内置固定 keystore（`.github/signing/release.keystore.b64`），CI 每次构建复用同一把密钥，后续版本可直接覆盖升级，不再因签名变化导致安装冲突。
+- **更新代理修正**：移除误加的本机代理 `127.0.0.1:1080`（那是开发访问 GitHub 用，不该进 App）；默认直连检测 GitHub 最新 releases，下载可选公共代理：gh-proxy.org / gh-proxy.com / ghfast.top / gh.acmsz.top / github.chenc.dev / gh.monlor.com；旧配置中的本机代理值自动迁移为直连。
+- 版本号显示改为读取 BuildConfig，不再写死。
+
 ## [2.0.0] - 2026-11-17
 
 按用户反馈仿原版 Smart Drawer 1.0.3 重做界面与功能（逆向仅提取行为与文案，未复制原版代码）：

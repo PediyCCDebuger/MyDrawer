@@ -35,8 +35,8 @@ data class UserPrefs(
     val manualOrders: Map<String, List<String>> = emptyMap(),
     /** 使用频次：包名 -> 启动次数，用于「最常用」分类与按频率排序。 */
     val launchCounts: Map<String, Int> = emptyMap(),
-    // 2.0 新增：更新代理
-    val updateProxy: String = Updater.PROXY_LOCAL,
+    // 更新代理：默认直连 GitHub；可选公共反向代理（不含本机代理）
+    val updateProxy: String = Updater.PROXY_DIRECT,
 )
 
 object SortMode {
@@ -69,11 +69,15 @@ class Preferences(context: Context) {
 
     private fun load(): UserPrefs {
         val raw = prefs.getString(KEY_PREFS, null) ?: return UserPrefs()
-        return try {
+        val loaded = try {
             json.decodeFromString<UserPrefs>(raw)
         } catch (_: Exception) {
             UserPrefs()
         }
+        // 2.1 迁移：移除旧版内置的本机代理 127.0.0.1:1080（那是开发用，普通设备无此服务）。
+        return if (loaded.updateProxy !in Updater.PROXIES) {
+            loaded.copy(updateProxy = Updater.PROXY_DIRECT)
+        } else loaded
     }
 
     private fun save() {

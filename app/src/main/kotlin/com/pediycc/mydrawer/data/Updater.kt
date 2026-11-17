@@ -13,22 +13,24 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * 自动更新：查询 GitHub Releases 最新版，下载 APK 并拉起系统安装。
- * 直连 GitHub 不稳定，提供一组反向代理；另外支持本机 HTTP 代理 127.0.0.1:1080。
+ * 自动更新：直接查询 GitHub Releases 最新版，下载 APK 并拉起系统安装。
+ *
+ * 检测始终优先直连 api.github.com；下载因为 github.com 直连不稳，可选公共反向代理，
+ * 格式为 `https://<proxy>/<原始直连链接>`（把完整 browser_download_url 拼到代理域名后）。
+ * 注意：这里不内置任何本机代理（127.0.0.1:1080 之类）——那是开发环境访问 GitHub 用的，
+ * 普通用户手机上并不存在。
  */
 object Updater {
     private const val REPO = "PediyCCDebuger/MyDrawer"
     private const val API = "https://api.github.com/repos/$REPO/releases/latest"
 
     const val PROXY_DIRECT = "直连（不使用代理）"
-    const val PROXY_LOCAL = "本机代理 127.0.0.1:1080"
 
     data class ReleaseInfo(val tag: String, val apkUrl: String, val apkName: String, val body: String)
 
-    /** 第一项为直连，第二项为用户本机代理，其后为公共反向代理。 */
+    /** 第一项为直连，其后为可选公共反向代理。 */
     val PROXIES = listOf(
         PROXY_DIRECT,
-        PROXY_LOCAL,
         "gh-proxy.org",
         "gh-proxy.com",
         "ghfast.top",
@@ -37,25 +39,32 @@ object Updater {
         "gh.monlor.com",
     )
 
+    /** 去掉可能的前导 v / V，便于版本比较。 */
     fun normalize(tag: String): String = tag.trim().removePrefix("v").removePrefix("V")
 
+    /** 远端 tag 是否与当前版本不同（即存在更新）。 */
     fun isNewer(tag: String, current: String): Boolean = normalize(tag) != normalize(current)
 
+    /**
+     * 拼代理地址。只有明确在 [PROXIES] 里的公共代理才加前缀；
+     * 直连、空值以及旧版本遗留的未知代理（例如本机 127.0.0.1:1080）一律按直连处理，
+     * 避免拼出非法 URL。
+     */
     private fun proxied(url: String, proxy: String): String =
-        if (proxy == PROXY_DIRECT || proxy == PROXY_LOCAL) url else "https://$proxy/$url"
+        if (proxy == PROXY_DIRECT || proxy.isBlank() || proxy !in PROXIES) url else "https://$proxy/$url"
 
-    private fun connect(url: String, proxy: String): HttpURLConnection {
+    private fun connect(url: String, proxy: String, readTimeout: Int): HttpURLConnection {
         val conn = URL(proxied(url, proxy)).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         conn.setRequestProperty("User-Agent", "MyDrawer")
         conn.connectTimeout = 15000
-        conn.readTimeout = 20000
+        conn.readTimeout = readTimeout
         return conn
     }
 
     suspend fun fetchLatest(proxy: String = PROXY_DIRECT): ReleaseInfo? = withContext(Dispatchers.IO) {
         try {
-            val conn = connect(API, proxy)
+            val conn = connect(API, proxy, 15000)
             if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                 conn.disconnect()
                 return@withContext null
@@ -101,8 +110,7 @@ object Updater {
                 val dir = File(context.cacheDir, "update")
                 dir.mkdirs()
                 val out = File(dir, if (info.apkName.isBlank()) "MyDrawer-update.apk" else info.apkName)
-                val conn = connect(info.apkUrl, proxy)
-                conn.readTimeout = 60000
+                val conn = connect(info.apkUrl, proxy, 60000)
                 if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                     conn.disconnect()
                     return@withContext null

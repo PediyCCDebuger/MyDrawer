@@ -25,6 +25,7 @@ import com.pediycc.mydrawer.data.CategoryDef
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
+import com.pediycc.mydrawer.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -276,7 +277,7 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
         title = { Text("检查更新") },
         text = {
             Column {
-                Text("当前版本 2.0.0")
+                Text("当前版本 ${BuildConfig.VERSION_NAME}")
                 Spacer(Modifier.height(8.dp))
                 when {
                     checking -> Row(verticalAlignment = Alignment.CenterVertically) {
