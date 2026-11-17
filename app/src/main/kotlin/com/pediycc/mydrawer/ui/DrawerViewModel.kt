@@ -8,11 +8,13 @@ import androidx.lifecycle.viewModelScope
 import com.pediycc.mydrawer.data.AppInfo
 import com.pediycc.mydrawer.data.AppRepository
 import com.pediycc.mydrawer.data.BackupManager
+import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.CategoryCatalog
 import com.pediycc.mydrawer.data.Preferences
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Sorter
+import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,9 @@ data class DrawerUiState(
     val prefs: UserPrefs = UserPrefs(),
     val loading: Boolean = true,
     val message: String? = null,
+    /** 多选模式与已选包。 */
+    val selectMode: Boolean = false,
+    val selected: Set<String> = emptySet(),
 )
 
 class DrawerViewModel(app: Application) : AndroidViewModel(app) {
@@ -34,28 +39,47 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     private val catalog = CategoryCatalog(context)
     private val repo = AppRepository(context, catalog, prefs)
     private val backup = BackupManager(context)
+    private val iconStore = IconStore(context)
 
     private val _ui = MutableStateFlow(DrawerUiState(prefs = prefs.current))
     val ui: StateFlow<DrawerUiState> = _ui.asStateFlow()
 
-    init {
-        refresh()
-    }
+    init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true)
             val apps = repo.loadApps()
-            _ui.value = _ui.value.copy(apps = apps, prefs = prefs.current, loading = false)
+            _ui.value = _ui.value.copy(
+                apps = apps,
+                prefs = prefs.current,
+                loading = false,
+                selected = _ui.value.selected.intersect(apps.map { it.packageName }.toSet()),
+            )
         }
     }
 
     fun selectCategory(id: String) {
-        _ui.value = _ui.value.copy(selectedCategory = id)
+        _ui.value = _ui.value.copy(selectedCategory = id, selectMode = false, selected = emptySet())
     }
 
     fun setQuery(q: String) {
         _ui.value = _ui.value.copy(query = q)
+    }
+
+    // ---- 应用操作 ----
+
+    fun launch(packageName: String) {
+        val intent = repo.getLaunchIntent(packageName)
+        if (intent != null) {
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(intent) }
+                .onFailure { notify("无法启动该应用") }
+            prefs.recordLaunch(packageName)
+            _ui.value = _ui.value.copy(prefs = prefs.current)
+        } else {
+            notify("该应用没有可启动入口")
+        }
     }
 
     fun toggleHidden(packageName: String) {
@@ -70,13 +94,127 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         notify("分类已更改")
     }
 
+    fun renameApp(packageName: String, label: String) {
+        prefs.renameApp(packageName, label.trim())
+        refresh()
+        notify("名称已更改")
+    }
+
+    fun restoreAppLabel(packageName: String) {
+        prefs.update { p -> p.copy(appLabels = p.appLabels - packageName) }
+        refresh()
+        notify("已恢复原名称")
+    }
+
+    fun setAppIcon(packageName: String, key: String) {
+        prefs.setAppIcon(packageName, key)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        notify("图标已更改")
+    }
+
+    /** 从本机图库选图片作为应用 / 分类图标：复制到应用私有目录，避免 Uri 权限失效。 */
+    fun setCustomIcon(uri: Uri, target: IconTarget) {
+        viewModelScope.launch {
+            val path = iconStore.copy(uri)
+            if (path == null) {
+                notify("图片读取失败")
+                return@launch
+            }
+            val key = "file:$path"
+            when (target) {
+                is IconTarget.App -> prefs.setAppIcon(target.packageName, key)
+                is IconTarget.Category -> prefs.setCategoryIcon(target.categoryId, key)
+            }
+            refresh()
+            notify("图标已更改")
+        }
+    }
+
+    // ---- 分类操作 ----
+
+    fun renameCategory(categoryId: String, label: String) {
+        prefs.renameCategory(categoryId, label.trim())
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        notify("分类名称已更改")
+    }
+
+    fun setCategoryIcon(categoryId: String, key: String) {
+        prefs.setCategoryIcon(categoryId, key)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        notify("分类图标已更改")
+    }
+
+    fun setCategorySort(categoryId: String, mode: String) {
+        prefs.setCategorySort(categoryId, mode)
+        if (mode == SortMode.MANUAL) {
+            // 首次切到手动排序：把当前可见顺序固化为初始值。
+            val current = Sorter.manualOrderOf(_ui.value.apps, prefs.current, categoryId)
+            prefs.setManualOrder(categoryId, current)
+        }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        notify("排序方式已更改")
+    }
+
+    fun moveManual(categoryId: String, packageName: String, delta: Int) {
+        prefs.moveManual(categoryId, packageName, delta)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    fun moveCategory(categoryId: String, delta: Int) {
+        val ids = Categories.ordered(prefs.current.categoryOrder, prefs.current.frequentEnabled)
+            .map { it.id }.toMutableList()
+        val from = ids.indexOf(categoryId)
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, ids.lastIndex)
+        if (to == from) return
+        java.util.Collections.swap(ids, from, to)
+        prefs.update { it.copy(categoryOrder = ids) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    // ---- 多选 ----
+
+    fun setSelectMode(on: Boolean) {
+        _ui.value = _ui.value.copy(selectMode = on, selected = if (on) emptySet() else emptySet())
+    }
+
+    fun toggleSelected(packageName: String) {
+        val s = _ui.value
+        val next = if (packageName in s.selected) s.selected - packageName else s.selected + packageName
+        _ui.value = s.copy(selected = next)
+    }
+
+    fun selectAllVisible() {
+        val ids = visibleGroups().flatMap { it.second }.map { it.packageName }.toSet()
+        _ui.value = _ui.value.copy(selected = ids)
+    }
+
+    fun moveSelectedTo(categoryId: String) {
+        val ids = _ui.value.selected
+        if (ids.isEmpty()) {
+            notify("请先选择应用")
+            return
+        }
+        prefs.overrideCategories(ids, categoryId)
+        _ui.value = _ui.value.copy(selectMode = false, selected = emptySet())
+        refresh()
+        notify("已将 ${ids.size} 个应用移动到${Categories.labelOf(categoryId)}")
+    }
+
+    // ---- 设置 ----
+
     fun setSortMode(mode: String) {
         prefs.update { it.copy(sortMode = mode) }
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
     fun setGridColumns(columns: Int) {
-        prefs.update { it.copy(gridColumns = columns.coerceIn(3, 6)) }
+        prefs.update { it.copy(gridColumns = columns.coerceIn(2, 8)) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    fun setLandscapeColumns(columns: Int) {
+        prefs.update { it.copy(landscapeColumns = columns.coerceIn(2, 10)) }
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
@@ -85,43 +223,19 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
-    fun launch(packageName: String) {
-        val intent = repo.getLaunchIntent(packageName)
-        if (intent != null) {
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            runCatching { context.startActivity(intent) }
-                .onFailure { notify("无法启动该应用") }
-        } else {
-            notify("该应用没有可启动入口")
-        }
+    fun updatePrefs(transform: (UserPrefs) -> UserPrefs) {
+        prefs.update(transform)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
-    /** 当前抽屉可见应用：先按隐藏过滤，再按搜索词与分类过滤，最后排序。 */
-    fun visibleGroups(): List<Pair<String, List<AppInfo>>> {
-        val s = _ui.value
-        var apps = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
-        if (s.query.isNotBlank()) {
-            val q = s.query.trim()
-            apps = apps.filter { it.label.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true) }
-        }
-        if (s.selectedCategory != "all") {
-            apps = apps.filter { it.categoryId == s.selectedCategory }
-        }
-        return Sorter.group(apps, s.prefs.sortMode)
-    }
-
-    fun categoryCount(categoryId: String): Int {
-        val s = _ui.value
-        val visible = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
-        return if (categoryId == "all") visible.size else visible.count { it.categoryId == categoryId }
-    }
+    // ---- 备份 / 更新 ----
 
     fun exportBackup(uri: Uri) {
         viewModelScope.launch {
             val text = backup.export(prefs.current)
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
-            }.onSuccess { notify("备份已导出") }
+            }.onSuccess { notify("配置备份已导出") }
                 .onFailure { notify("导出失败：${it.message}") }
         }
     }
@@ -137,9 +251,28 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { imported ->
                     prefs.replaceAll(imported)
                     refresh()
-                    notify("备份已导入")
+                    notify("配置备份已导入")
                 }
                 .onFailure { notify("导入失败：${it.message}") }
+        }
+    }
+
+    fun checkUpdate(onResult: (Updater.ReleaseInfo?, String?) -> Unit) {
+        viewModelScope.launch {
+            val info = Updater.fetchLatest(prefs.current.updateProxy)
+            onResult(info, if (info == null) "检查更新失败，可更换代理后重试" else null)
+        }
+    }
+
+    fun downloadAndInstall(info: Updater.ReleaseInfo) {
+        viewModelScope.launch {
+            notify("开始下载 ${info.tag}…")
+            val file = Updater.download(context, info, prefs.current.updateProxy)
+            if (file == null) notify("下载失败，可更换代理后重试")
+            else {
+                Updater.install(context, file)
+                notify("下载完成，请确认安装")
+            }
         }
     }
 
@@ -151,7 +284,46 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(message = msg)
     }
 
-    val categories get() = Categories.ALL
-    val sortModes get() = listOf(SortMode.BY_NAME, SortMode.BY_INSTALL_TIME, SortMode.BY_CATEGORY)
+    /** 当前抽屉可见应用：隐藏过滤 → 搜索词 → 分类过滤 → 按设置排序分组。 */
+    fun visibleGroups(): List<Pair<String, List<AppInfo>>> {
+        val s = _ui.value
+        var apps = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
+        if (s.query.isNotBlank()) {
+            val q = s.query.trim()
+            apps = apps.filter {
+                it.label.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true)
+            }
+        }
+        if (s.selectedCategory != "all") {
+            apps = apps.filter {
+                it.categoryId == s.selectedCategory ||
+                    (s.selectedCategory == Categories.FREQUENT && (s.prefs.launchCounts[it.packageName] ?: 0) > 0)
+            }
+        }
+        return Sorter.groupEx(apps, s.prefs)
+    }
+
+    fun categoryCount(categoryId: String): Int {
+        val s = _ui.value
+        val visible = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
+        return if (categoryId == "all") visible.size else visible.count {
+            it.categoryId == categoryId ||
+                (categoryId == Categories.FREQUENT && (s.prefs.launchCounts[it.packageName] ?: 0) > 0)
+        }
+    }
+
+    fun categoryLabel(id: String): String = _ui.value.prefs.categoryLabels[id] ?: Categories.labelOf(id)
+    fun categoryIconKey(id: String): String = _ui.value.prefs.categoryIcons[id] ?: Categories.iconKeyOf(id)
+
+    fun appLabel(app: AppInfo): String = app.label
+    fun appIconKey(packageName: String): String? = _ui.value.prefs.appIcons[packageName]
+
+    fun builtInIconLabel(key: String?): String = BuiltInIcons.labelOf(key)
+
     fun backupFileName() = backup.fileName()
+}
+
+sealed class IconTarget {
+    data class App(val packageName: String) : IconTarget()
+    data class Category(val categoryId: String) : IconTarget()
 }

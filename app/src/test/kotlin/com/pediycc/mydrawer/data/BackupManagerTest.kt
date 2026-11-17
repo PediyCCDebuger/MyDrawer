@@ -16,6 +16,10 @@ class BackupManagerTest {
             sortMode = SortMode.BY_CATEGORY,
             gridColumns = 5,
             showSystemApps = true,
+            categoryLabels = mapOf("games" to "游戏大厅"),
+            showAppLabels = false,
+            frequentEnabled = false,
+            updateProxy = "ghfast.top",
         )
         val backup = BackupFile(prefs = prefs)
         val raw = json.encodeToString(backup)
@@ -25,7 +29,7 @@ class BackupManagerTest {
 
     @Test
     fun `missing fields fall back to defaults`() {
-        val raw = """{"format":"mydrawer-backup","version":1,"prefs":{}}"""
+        val raw = """{"format":"mydrawer-backup","prefs":{}}"""
         val decoded = json.decodeFromString<BackupFile>(raw)
         assertEquals(UserPrefs(), decoded.prefs)
     }
