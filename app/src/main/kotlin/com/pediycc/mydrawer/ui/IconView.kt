@@ -14,7 +14,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.data.AppInfo
+import com.pediycc.mydrawer.data.AppRepository
 import com.pediycc.mydrawer.data.BuiltInIcons
+import com.pediycc.mydrawer.data.CategoryCatalog
+import com.pediycc.mydrawer.data.Preferences
 
 /**
  * 统一图标渲染：
@@ -90,11 +93,15 @@ fun DrawerIcon(
     }
 }
 
-private fun android.graphics.drawable.Drawable.toBitmapSafe(): Bitmap =
+private fun android.graphics.drawable.Drawable.toBitmapSafe(): android.graphics.Bitmap =
     try {
-        androidx.core.graphics.drawable.toBitmap(this, 128, 128)
+        val out = android.graphics.Bitmap.createBitmap(128, 128, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(out)
+        setBounds(0, 0, 128, 128)
+        draw(canvas)
+        out
     } catch (e: Exception) {
-        Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
+        android.graphics.Bitmap.createBitmap(128, 128, android.graphics.Bitmap.Config.ARGB_8888)
     }
 
 /** 延迟持有仓库，避免 Composition 里重复构造。 */
@@ -102,7 +109,7 @@ object AppRepositoryHolder {
     @Volatile
     private var instance: AppRepository? = null
 
-    fun get(context: Context): AppRepository? = instance ?: synchronized(this) {
+    fun get(context: android.content.Context): AppRepository? = instance ?: synchronized(this) {
         instance ?: try {
             AppRepository(
                 context.applicationContext,

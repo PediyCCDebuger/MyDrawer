@@ -127,11 +127,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     )
                 }
                 if (state.prefs.leftHanded) {
-                    Box(Modifier.weight(1f)) { AppArea(vm, state) }
+                    Box(Modifier.weight(1f)) { AppArea(vm, state, onMenu = { menuApp = it }) }
                     rail()
                 } else {
                     rail()
-                    Box(Modifier.weight(1f)) { AppArea(vm, state) }
+                    Box(Modifier.weight(1f)) { AppArea(vm, state, onMenu = { menuApp = it }) }
                 }
             }
         }
@@ -223,7 +223,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
 }
 
 @Composable
-private fun AppArea(vm: DrawerViewModel, state: com.pediycc.mydrawer.ui.DrawerUiState) {
+private fun AppArea(
+    vm: DrawerViewModel,
+    state: com.pediycc.mydrawer.ui.DrawerUiState,
+    onMenu: (AppInfo) -> Unit,
+) {
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = state.query,
@@ -258,7 +262,7 @@ private fun AppArea(vm: DrawerViewModel, state: com.pediycc.mydrawer.ui.DrawerUi
                 vm = vm,
                 state = state,
                 groups = groups,
-                onMenu = { menuApp = it },
+                onMenu = onMenu,
             )
         }
     }
