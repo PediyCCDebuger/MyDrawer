@@ -84,6 +84,6 @@ class SorterTest {
         assertEquals(setOf("x"), parsed.prefs.hiddenPackages)
         assertEquals(5, parsed.prefs.gridColumns)
         assertEquals(true, parsed.prefs.frequentEnabled)
-        assertEquals(Updater.PROXY_LOCAL, parsed.prefs.updateProxy)
+        assertEquals(Updater.PROXY_DIRECT, parsed.prefs.updateProxy)
     }
 }
