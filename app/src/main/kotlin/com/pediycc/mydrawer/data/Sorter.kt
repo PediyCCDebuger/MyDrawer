@@ -59,7 +59,16 @@ object Sorter {
             } else {
                 apps.filter { it.categoryId == cat.id }
             }
-            if (inCat.isEmpty()) null else {
+            if (inCat.isEmpty()) null else if (cat.id == Categories.FREQUENT) {
+                // 最常用分类本身已按使用频次排好并截取前 10，不能再被全局排序方式打乱。
+                // 仅当用户显式为它选了排序方式时才重排。
+                val explicit = prefs.categorySortModes[cat.id]
+                if (explicit == null) {
+                    cat.id to inCat
+                } else {
+                    cat.id to sort(inCat, explicit, prefs.launchCounts, prefs.manualOrders[cat.id] ?: emptyList())
+                }
+            } else {
                 val mode = prefs.categorySortModes[cat.id] ?: prefs.sortMode
                 cat.id to sort(inCat, mode, prefs.launchCounts, prefs.manualOrders[cat.id] ?: emptyList())
             }

@@ -1,0 +1,426 @@
+﻿2026-11-17T07:56:23.5673212Z Current runner version: '2.338.2'
+2026-11-17T07:56:23.5692698Z ##[group]Runner Image Provisioner
+2026-11-17T07:56:23.5693362Z Hosted Compute Agent
+2026-11-17T07:56:23.5693763Z Version: 20261103.629
+2026-11-17T07:56:23.5694255Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-17T07:56:23.5694772Z Build Date: 2026-11-03T17:26:59Z
+2026-11-17T07:56:23.5695354Z Worker ID: {0b7e0ab3-a153-4253-ada0-2a00d920584d}
+2026-11-17T07:56:23.5695859Z Region: us-west-2
+2026-11-17T07:56:23.5696234Z Cloud: AWS
+2026-11-17T07:56:23.5696646Z ##[endgroup]
+2026-11-17T07:56:23.5697535Z ##[group]Operating System
+2026-11-17T07:56:23.5697992Z Ubuntu
+2026-11-17T07:56:23.5698367Z 26.04.1
+2026-11-17T07:56:23.5698728Z LTS
+2026-11-17T07:56:23.5699117Z ##[endgroup]
+2026-11-17T07:56:23.5699713Z ##[group]Runner Image
+2026-11-17T07:56:23.5700219Z Image: ubuntu-26.04
+2026-11-17T07:56:23.5700629Z Version: 20261111.82.6
+2026-11-17T07:56:23.5701662Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.82/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-17T07:56:23.5702812Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.82
+2026-11-17T07:56:23.5703549Z ##[endgroup]
+2026-11-17T07:56:23.5704342Z ##[group]GITHUB_TOKEN Permissions
+2026-11-17T07:56:23.5706279Z Contents: read
+2026-11-17T07:56:23.5706694Z Metadata: read
+2026-11-17T07:56:23.5707094Z ##[endgroup]
+2026-11-17T07:56:23.5708693Z Secret source: Actions
+2026-11-17T07:56:23.5709340Z Cache mode: write
+2026-11-17T07:56:23.5710085Z Prepare workflow directory
+2026-11-17T07:56:23.5938803Z Prepare all required actions
+2026-11-17T07:56:23.5975345Z Getting action download info
+2026-11-17T07:56:23.9870733Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-17T07:56:26.3820652Z Download action repository 'actions/setup-java@v4' (SHA:cf277c60eb25467037889841efdb72551f06f6c3)
+2026-11-17T07:56:26.7893957Z Download action repository 'gradle/actions@v4' (SHA:ed408507eac070d1f99cc633dbcf757c94c7933a)
+2026-11-17T07:56:27.4165934Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-17T07:56:27.6556873Z Complete job name: build
+2026-11-17T07:56:27.7130880Z ##[group]Run actions/checkout@v4
+2026-11-17T07:56:27.7131464Z with:
+2026-11-17T07:56:27.7131746Z   repository: PediyCCDebuger/MyDrawer
+2026-11-17T07:56:27.7133745Z   token: ***
+2026-11-17T07:56:27.7134010Z   ssh-strict: true
+2026-11-17T07:56:27.7134260Z   ssh-user: git
+2026-11-17T07:56:27.7134557Z   persist-credentials: true
+2026-11-17T07:56:27.7134830Z   clean: true
+2026-11-17T07:56:27.7135181Z   sparse-checkout-cone-mode: true
+2026-11-17T07:56:27.7135518Z   fetch-depth: 1
+2026-11-17T07:56:27.7135760Z   fetch-tags: false
+2026-11-17T07:56:27.7136053Z   show-progress: true
+2026-11-17T07:56:27.7136309Z   lfs: false
+2026-11-17T07:56:27.7136572Z   submodules: false
+2026-11-17T07:56:27.7136844Z   set-safe-directory: true
+2026-11-17T07:56:27.7137135Z   allow-unsafe-pr-checkout: false
+2026-11-17T07:56:27.7137563Z ##[endgroup]
+2026-11-17T07:56:31.4799457Z Syncing repository: PediyCCDebuger/MyDrawer
+2026-11-17T07:56:31.4801590Z ##[group]Getting Git version info
+2026-11-17T07:56:31.4802206Z Working directory is '/home/runner/work/MyDrawer/MyDrawer'
+2026-11-17T07:56:31.4802846Z [command]/usr/bin/git version
+2026-11-17T07:56:31.4806809Z git version 2.56.1
+2026-11-17T07:56:31.4820179Z ##[endgroup]
+2026-11-17T07:56:31.4831262Z Temporarily overriding HOME='/home/runner/work/_temp/a3c63c00-2517-41bf-a01d-ea551b4830ae' before making global git config changes
+2026-11-17T07:56:31.4833983Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-17T07:56:31.4834618Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/MyDrawer/MyDrawer
+2026-11-17T07:56:31.5305598Z Deleting the contents of '/home/runner/work/MyDrawer/MyDrawer'
+2026-11-17T07:56:31.5306653Z ##[group]Initializing the repository
+2026-11-17T07:56:31.5312322Z [command]/usr/bin/git init /home/runner/work/MyDrawer/MyDrawer
+2026-11-17T07:56:31.5673193Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-17T07:56:31.5673762Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-17T07:56:31.5674221Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-17T07:56:31.5674579Z hint: call:
+2026-11-17T07:56:31.5674746Z hint:
+2026-11-17T07:56:31.5674969Z hint: 	git config --global init.defaultBranch <name>
+2026-11-17T07:56:31.5675191Z hint:
+2026-11-17T07:56:31.5675446Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-17T07:56:31.5675851Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-17T07:56:31.5676182Z hint:
+2026-11-17T07:56:31.5676383Z hint: 	git branch -m <name>
+2026-11-17T07:56:31.5676601Z hint:
+2026-11-17T07:56:31.5676853Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-17T07:56:31.5687827Z Initialized empty Git repository in /home/runner/work/MyDrawer/MyDrawer/.git/
+2026-11-17T07:56:31.5696127Z [command]/usr/bin/git remote add origin https://github.com/PediyCCDebuger/MyDrawer
+2026-11-17T07:56:31.5743925Z ##[endgroup]
+2026-11-17T07:56:31.5744406Z ##[group]Disabling automatic garbage collection
+2026-11-17T07:56:31.5746667Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-17T07:56:31.5772707Z ##[endgroup]
+2026-11-17T07:56:31.5773109Z ##[group]Setting up auth
+2026-11-17T07:56:31.5773484Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-17T07:56:31.5794280Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-17T07:56:31.9440638Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-17T07:56:31.9464684Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-17T07:56:31.9640998Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-17T07:56:31.9662142Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-17T07:56:31.9833788Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-17T07:56:31.9857798Z ##[endgroup]
+2026-11-17T07:56:31.9858180Z ##[group]Fetching the repository
+2026-11-17T07:56:31.9864106Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4d9cc79cdaf566dcbbfba99f6b214d2f5bee4394:refs/remotes/origin/main
+2026-11-17T07:56:32.3671669Z From https://github.com/PediyCCDebuger/MyDrawer
+2026-11-17T07:56:32.3672141Z  * [new ref]         4d9cc79cdaf566dcbbfba99f6b214d2f5bee4394 -> origin/main
+2026-11-17T07:56:32.3683645Z ##[endgroup]
+2026-11-17T07:56:32.3684164Z ##[group]Determining the checkout info
+2026-11-17T07:56:32.3684682Z ##[endgroup]
+2026-11-17T07:56:32.3685085Z [command]/usr/bin/git sparse-checkout disable
+2026-11-17T07:56:32.3750566Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-17T07:56:32.3751640Z ##[group]Checking out the ref
+2026-11-17T07:56:32.3760597Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-17T07:56:32.3836769Z Switched to a new branch 'main'
+2026-11-17T07:56:32.3843372Z branch 'main' set up to track 'origin/main'.
+2026-11-17T07:56:32.3880770Z ##[endgroup]
+2026-11-17T07:56:32.3882013Z [command]/usr/bin/git log -1 --format=%H
+2026-11-17T07:56:32.3897581Z 4d9cc79cdaf566dcbbfba99f6b214d2f5bee4394
+2026-11-17T07:56:32.4106710Z ##[group]Run actions/setup-java@v4
+2026-11-17T07:56:32.4106924Z with:
+2026-11-17T07:56:32.4107080Z   distribution: temurin
+2026-11-17T07:56:32.4107254Z   java-version: 17
+2026-11-17T07:56:32.4107538Z   java-package: jdk
+2026-11-17T07:56:32.4107720Z   check-latest: false
+2026-11-17T07:56:32.4107881Z   server-id: github
+2026-11-17T07:56:32.4108092Z   server-username: GITHUB_ACTOR
+2026-11-17T07:56:32.4108362Z   server-password: GITHUB_TOKEN
+2026-11-17T07:56:32.4108592Z   overwrite-settings: true
+2026-11-17T07:56:32.4108824Z   job-status: success
+2026-11-17T07:56:32.4110745Z   token: ***
+2026-11-17T07:56:32.4110977Z ##[endgroup]
+2026-11-17T07:56:32.5839451Z ##[warning]setup-java v4 is deprecated and will no longer receive updates. Please migrate to actions/setup-java@v5.
+2026-11-17T07:56:32.5845067Z ##[group]Installed distributions
+2026-11-17T07:56:32.6258298Z Resolved Java 17.0.21+9 from tool-cache
+2026-11-17T07:56:32.6258724Z Setting Java 17.0.21+9 as the default
+2026-11-17T07:56:32.6264504Z (node:2378) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-17T07:56:32.6265071Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-17T07:56:32.6267002Z Creating toolchains.xml for JDK version 17 from temurin
+2026-11-17T07:56:32.6317461Z Writing to /home/runner/.m2/toolchains.xml
+2026-11-17T07:56:32.6317814Z 
+2026-11-17T07:56:32.6317921Z Java configuration:
+2026-11-17T07:56:32.6318166Z   Distribution: temurin
+2026-11-17T07:56:32.6318405Z   Version: 17.0.21+9
+2026-11-17T07:56:32.6318759Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:56:32.6319066Z 
+2026-11-17T07:56:32.6319453Z ##[endgroup]
+2026-11-17T07:56:32.6340344Z Creating settings.xml with server-id: github
+2026-11-17T07:56:32.6362016Z Writing to /home/runner/.m2/settings.xml
+2026-11-17T07:56:32.6546518Z ##[group]Run gradle/actions/setup-gradle@v4
+2026-11-17T07:56:32.6546754Z with:
+2026-11-17T07:56:32.6546914Z   cache-disabled: false
+2026-11-17T07:56:32.6547089Z   cache-read-only: false
+2026-11-17T07:56:32.6547268Z   cache-write-only: false
+2026-11-17T07:56:32.6547464Z   cache-overwrite-existing: false
+2026-11-17T07:56:32.6547677Z   cache-cleanup: on-success
+2026-11-17T07:56:32.6547892Z   gradle-home-cache-includes: caches
+notifications
+
+2026-11-17T07:56:32.6548123Z   add-job-summary: always
+2026-11-17T07:56:32.6548314Z   add-job-summary-as-pr-comment: never
+2026-11-17T07:56:32.6548525Z   dependency-graph: disabled
+2026-11-17T07:56:32.6548756Z   dependency-graph-report-dir: dependency-graph-reports
+2026-11-17T07:56:32.6549023Z   dependency-graph-continue-on-failure: true
+2026-11-17T07:56:32.6549254Z   build-scan-publish: false
+2026-11-17T07:56:32.6549440Z   validate-wrappers: true
+2026-11-17T07:56:32.6549871Z   allow-snapshot-wrappers: false
+2026-11-17T07:56:32.6550132Z   gradle-home-cache-strict-match: false
+2026-11-17T07:56:32.6550351Z   workflow-job-context: null
+2026-11-17T07:56:32.6552090Z   github-token: ***
+2026-11-17T07:56:32.6552255Z env:
+2026-11-17T07:56:32.6552478Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:56:32.6552831Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:56:32.6553113Z ##[endgroup]
+2026-11-17T07:56:34.9240030Z Merged default JDK locations into /home/runner/.m2/toolchains.xml
+2026-11-17T07:56:34.9240605Z Preparing cache for cleanup.
+2026-11-17T07:56:34.9243264Z ##[group]Restore Gradle state from cache
+2026-11-17T07:56:35.2281224Z Cache hit for restore-key: gradle-home-v1|Linux-X64|build[b8a35c2f917259958c9abe8f2ff1b5ff]-449dde8fb7fb1e650d56aee538ee8e562ec9425d
+2026-11-17T07:56:36.5756823Z Received 0 of 27834064 (0.0%), 0.0 MBs/sec
+2026-11-17T07:56:37.3446656Z Received 27834064 of 27834064 (100.0%), 15.0 MBs/sec
+2026-11-17T07:56:37.3450867Z Cache Size: ~27 MB (27834064 B)
+2026-11-17T07:56:37.3467207Z [command]/usr/bin/tar -xf /home/runner/work/_temp/6b9ee6d7-dbb5-473f-a655-25a4caf62406/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:37.4027212Z Cache restored successfully
+2026-11-17T07:56:37.4039439Z Restored cache entry with key gradle-home-v1|Linux-X64|build[b8a35c2f917259958c9abe8f2ff1b5ff]-4d9cc79cdaf566dcbbfba99f6b214d2f5bee4394 to /home/runner/.gradle/caches,/home/runner/.gradle/notifications,/home/runner/.gradle/.setup-gradle in 2478ms
+2026-11-17T07:56:37.6497573Z Cache hit for: gradle-kotlin-dsl-v1-522349a245ba4c93cce786b859e5b0ba
+2026-11-17T07:56:37.6665382Z Cache hit for: gradle-instrumented-jars-v1-376a063a14d802d8b77d35934f81d492
+2026-11-17T07:56:37.6671773Z Cache hit for: gradle-dependencies-v1-aad23d10e4ae97c40898aec15b577413
+2026-11-17T07:56:37.6714548Z Cache hit for: gradle-wrapper-zips-v1-0745be66ec2c2a083a82d587fa4f7d57
+2026-11-17T07:56:37.6823935Z Cache hit for: gradle-transforms-v1-4b594660c282962b1718b145c408d241
+2026-11-17T07:56:38.4581349Z Received 77693 of 77693 (100.0%), 0.2 MBs/sec
+2026-11-17T07:56:38.4582128Z Cache Size: ~0 MB (77693 B)
+2026-11-17T07:56:38.4594100Z [command]/usr/bin/tar -xf /home/runner/work/_temp/ed96d947-210f-478d-9368-327b586e0153/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:38.4669812Z Cache restored successfully
+2026-11-17T07:56:38.4671381Z Restored cache entry with key gradle-kotlin-dsl-v1-522349a245ba4c93cce786b859e5b0ba to /home/runner/.gradle/caches/*/kotlin-dsl/accessors/*/,/home/runner/.gradle/caches/*/kotlin-dsl/scripts/*/ in 1063ms
+2026-11-17T07:56:38.5069862Z Received 64483 of 64483 (100.0%), 0.1 MBs/sec
+2026-11-17T07:56:38.5070309Z Cache Size: ~0 MB (64483 B)
+2026-11-17T07:56:38.5084157Z [command]/usr/bin/tar -xf /home/runner/work/_temp/f93d32dd-1652-499e-b59e-7508020c5732/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:38.5146144Z Cache restored successfully
+2026-11-17T07:56:38.5147173Z Restored cache entry with key gradle-instrumented-jars-v1-376a063a14d802d8b77d35934f81d492 to /home/runner/.gradle/caches/jars-*/*/ in 1110ms
+2026-11-17T07:56:38.9897434Z Received 0 of 350051149 (0.0%), 0.0 MBs/sec
+2026-11-17T07:56:39.0082948Z Received 0 of 150832974 (0.0%), 0.0 MBs/sec
+2026-11-17T07:56:39.0166354Z Received 0 of 201749504 (0.0%), 0.0 MBs/sec
+2026-11-17T07:56:39.9904794Z Received 71303168 of 350051149 (20.4%), 34.0 MBs/sec
+2026-11-17T07:56:40.0106392Z Received 92274688 of 150832974 (61.2%), 44.0 MBs/sec
+2026-11-17T07:56:40.0156205Z Received 75497472 of 201749504 (37.4%), 36.0 MBs/sec
+2026-11-17T07:56:40.2450601Z Cache hit for: gradle-groovy-dsl-v1-b6f5f9c0fa16d2d2293e6a9db858ecd9
+2026-11-17T07:56:40.8092764Z Received 150832974 of 150832974 (100.0%), 51.4 MBs/sec
+2026-11-17T07:56:40.8093196Z Cache Size: ~144 MB (150832974 B)
+2026-11-17T07:56:40.8141307Z [command]/usr/bin/tar -xf /home/runner/work/_temp/03ea60fd-0a8a-4616-87a0-060d12d5ebcd/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:40.9481198Z Cache restored successfully
+2026-11-17T07:56:40.9601235Z Restored cache entry with key gradle-wrapper-zips-v1-0745be66ec2c2a083a82d587fa4f7d57 to /home/runner/.gradle/wrapper/dists/gradle-9.8.2-bin/8wepis63pzuhrlfaiy04bagwu in 3554ms
+2026-11-17T07:56:40.9905560Z Received 180355072 of 350051149 (51.5%), 57.3 MBs/sec
+2026-11-17T07:56:41.0159242Z Received 130023424 of 201749504 (64.4%), 41.3 MBs/sec
+2026-11-17T07:56:41.1049956Z Received 109406 of 109406 (100.0%), 0.2 MBs/sec
+2026-11-17T07:56:41.1095197Z Cache Size: ~0 MB (109406 B)
+2026-11-17T07:56:41.1169091Z [command]/usr/bin/tar -xf /home/runner/work/_temp/6802033d-cb2d-4b80-ba1e-fb8654010ad5/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:41.1349374Z Cache restored successfully
+2026-11-17T07:56:41.1351956Z Restored cache entry with key gradle-groovy-dsl-v1-b6f5f9c0fa16d2d2293e6a9db858ecd9 to /home/runner/.gradle/caches/*/groovy-dsl/*/ in 3730ms
+2026-11-17T07:56:41.9908053Z Received 281018368 of 350051149 (80.3%), 67.0 MBs/sec
+2026-11-17T07:56:42.0174245Z Received 130023424 of 201749504 (64.4%), 31.0 MBs/sec
+2026-11-17T07:56:42.5052628Z Received 350051149 of 350051149 (100.0%), 73.9 MBs/sec
+2026-11-17T07:56:42.5054675Z Cache Size: ~334 MB (350051149 B)
+2026-11-17T07:56:42.5190251Z [command]/usr/bin/tar -xf /home/runner/work/_temp/9d92e609-5fea-4ef8-a670-e5b21dad4f1a/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:42.7267714Z Cache restored successfully
+2026-11-17T07:56:42.7385573Z Restored cache entry with key gradle-dependencies-v1-aad23d10e4ae97c40898aec15b577413 to /home/runner/.gradle/caches/modules-*/files-*/*/*/*/* in 5334ms
+2026-11-17T07:56:43.0181875Z Received 130023424 of 201749504 (64.4%), 24.8 MBs/sec
+2026-11-17T07:56:44.0186025Z Received 130023424 of 201749504 (64.4%), 20.7 MBs/sec
+2026-11-17T07:56:45.0181381Z Received 130023424 of 201749504 (64.4%), 17.7 MBs/sec
+2026-11-17T07:56:46.0182802Z Received 130023424 of 201749504 (64.4%), 15.5 MBs/sec
+2026-11-17T07:56:47.0251213Z Received 197555200 of 201749504 (97.9%), 20.9 MBs/sec
+2026-11-17T07:56:47.9737205Z Received 201749504 of 201749504 (100.0%), 19.3 MBs/sec
+2026-11-17T07:56:47.9737814Z Cache Size: ~192 MB (201749504 B)
+2026-11-17T07:56:47.9762778Z [command]/usr/bin/tar -xf /home/runner/work/_temp/7c183102-be0f-4979-9460-9eac1738064e/cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --use-compress-program unzstd
+2026-11-17T07:56:48.6962045Z Cache restored successfully
+2026-11-17T07:56:48.7025897Z Restored cache entry with key gradle-transforms-v1-4b594660c282962b1718b145c408d241 to /home/runner/.gradle/caches/transforms-4/*/,/home/runner/.gradle/caches/*/transforms/*/ in 11297ms
+2026-11-17T07:56:48.7087710Z ##[endgroup]
+2026-11-17T07:56:48.7150056Z ##[group]All Gradle Wrapper jars are valid
+2026-11-17T07:56:48.7150812Z ✓ Found known Gradle Wrapper JAR files:
+2026-11-17T07:56:48.7151458Z   381dff8aa434499aa93bc25572b049c8c586a67faff2c02f375e4f23e17e49de gradle/wrapper/gradle-wrapper.jar
+2026-11-17T07:56:48.7152001Z ##[endgroup]
+2026-11-17T07:56:48.7318201Z ##[group]Run ./gradlew testDebugUnitTest lintDebug assembleDebug
+2026-11-17T07:56:48.7318680Z [36;1m./gradlew testDebugUnitTest lintDebug assembleDebug[0m
+2026-11-17T07:56:48.7339975Z shell: /usr/bin/bash -e {0}
+2026-11-17T07:56:48.7340413Z env:
+2026-11-17T07:56:48.7340827Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:56:48.7341351Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:56:48.7341711Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-17T07:56:48.7341975Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-17T07:56:48.7342230Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-17T07:56:48.7342487Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-17T07:56:48.7342847Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-17T07:56:48.7343527Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-17T07:56:48.7343889Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-17T07:56:48.7344120Z ##[endgroup]
+2026-11-17T07:56:50.4628452Z Starting a Gradle Daemon (subsequent builds will be faster)
+2026-11-17T07:56:53.1624558Z Calculating task graph as no cached configuration is available for tasks: testDebugUnitTest lintDebug assembleDebug
+2026-11-17T07:57:06.6641487Z > Task :app:generateDebugAssets UP-TO-DATE
+2026-11-17T07:57:06.6660051Z > Task :app:preBuild UP-TO-DATE
+2026-11-17T07:57:06.6660731Z > Task :app:preDebugBuild UP-TO-DATE
+2026-11-17T07:57:06.7638481Z > Task :app:generateDebugResources FROM-CACHE
+2026-11-17T07:57:06.7670851Z > Task :app:javaPreCompileDebug FROM-CACHE
+2026-11-17T07:57:06.7690755Z > Task :app:generateDebugBuildConfig FROM-CACHE
+2026-11-17T07:57:06.8621218Z > Task :app:packageDebugResources FROM-CACHE
+2026-11-17T07:57:06.8681467Z > Task :app:mapDebugSourceSetPaths
+2026-11-17T07:57:06.8710389Z > Task :app:createDebugCompatibleScreenManifests
+2026-11-17T07:57:06.8771121Z > Task :app:extractDeepLinksDebug FROM-CACHE
+2026-11-17T07:57:07.0632001Z > Task :app:processDebugNavigationResources FROM-CACHE
+2026-11-17T07:57:07.1618373Z > Task :app:mergeDebugResources FROM-CACHE
+2026-11-17T07:57:07.1619234Z > Task :app:compileDebugNavigationResources FROM-CACHE
+2026-11-17T07:57:07.1626500Z > Task :app:preDebugUnitTestBuild UP-TO-DATE
+2026-11-17T07:57:07.1627183Z > Task :app:javaPreCompileDebugUnitTest FROM-CACHE
+2026-11-17T07:57:07.1627907Z > Task :app:preDebugAndroidTestBuild SKIPPED
+2026-11-17T07:57:07.1628400Z > Task :app:extractProguardFiles
+2026-11-17T07:57:07.1628924Z > Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+2026-11-17T07:57:09.5626041Z > Task :app:processDebugMainManifest FROM-CACHE
+2026-11-17T07:57:09.5690767Z > Task :app:processDebugManifest FROM-CACHE
+2026-11-17T07:57:09.5691570Z > Task :app:processDebugManifestForPackage FROM-CACHE
+2026-11-17T07:57:09.5692276Z > Task :app:generateDebugGlobalSynthetics FROM-CACHE
+2026-11-17T07:57:09.5692775Z > Task :app:checkDebugAarMetadata
+2026-11-17T07:57:09.5693356Z > Task :app:desugarDebugFileDependencies FROM-CACHE
+2026-11-17T07:57:09.6652251Z > Task :app:mergeDebugAssets
+2026-11-17T07:57:09.6681604Z > Task :app:compressDebugAssets FROM-CACHE
+2026-11-17T07:57:09.6710427Z > Task :app:mergeDebugJniLibFolders
+2026-11-17T07:57:09.7631061Z > Task :app:checkDebugDuplicateClasses
+2026-11-17T07:57:09.8636894Z > Task :app:parseDebugLocalResources FROM-CACHE
+2026-11-17T07:57:09.8667524Z > Task :app:mergeDebugNativeLibs
+2026-11-17T07:57:09.8694472Z > Task :app:generateDebugRFile FROM-CACHE
+2026-11-17T07:57:10.0633340Z > Task :app:processDebugResources FROM-CACHE
+2026-11-17T07:57:10.0650630Z > Task :app:mergeLibDexDebug FROM-CACHE
+2026-11-17T07:57:10.1634677Z 
+2026-11-17T07:57:10.1661188Z > Task :app:stripDebugDebugSymbols
+2026-11-17T07:57:10.1691622Z Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
+2026-11-17T07:57:10.2632458Z 
+2026-11-17T07:57:10.2660843Z > Task :app:writeDebugAppMetadata
+2026-11-17T07:57:10.2701079Z > Task :app:writeDebugSigningConfigVersions
+2026-11-17T07:57:10.4650975Z > Task :app:mergeExtDexDebug FROM-CACHE
+2026-11-17T07:57:10.7631064Z > Task :app:validateSigningDebug
+2026-11-17T07:57:23.1630393Z 
+2026-11-17T07:57:23.1660742Z > Task :app:compileDebugKotlin
+2026-11-17T07:57:23.1662514Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/data/BuiltInIcons.kt:31:38 'val Icons.Filled.Chat: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Chat.
+2026-11-17T07:57:23.1691519Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/data/BuiltInIcons.kt:63:38 'val Icons.Filled.MenuBook: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.MenuBook.
+2026-11-17T07:57:23.1720929Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/data/CategoryCatalog.kt:19:22 Redundant creation of Json format. Creating instances for each usage can be slow.
+2026-11-17T07:57:23.1750918Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/Dialogs.kt:46:35 'val Icons.Filled.Launch: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Launch.
+2026-11-17T07:57:23.1780812Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/Dialogs.kt:58:94 'val Icons.Filled.ArrowForward: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowForward.
+2026-11-17T07:57:23.1784549Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/Dialogs.kt:127:5 'fun ListItem(headlineContent: ComposableFunction0<Unit>, modifier: Modifier = ..., overlineContent: ComposableFunction0<Unit>? = ..., supportingContent: ComposableFunction0<Unit>? = ..., leadingContent: ComposableFunction0<Unit>? = ..., trailingContent: ComposableFunction0<Unit>? = ..., colors: ListItemColors = ..., tonalElevation: Dp = ..., shadowElevation: Dp = ...): Unit' is deprecated. Use the overload where `headlineContent` is now a trailing `content` lambda.
+2026-11-17T07:57:23.1808735Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/Dialogs.kt:149:21 'fun ListItem(headlineContent: ComposableFunction0<Unit>, modifier: Modifier = ..., overlineContent: ComposableFunction0<Unit>? = ..., supportingContent: ComposableFunction0<Unit>? = ..., leadingContent: ComposableFunction0<Unit>? = ..., trailingContent: ComposableFunction0<Unit>? = ..., colors: ListItemColors = ..., tonalElevation: Dp = ..., shadowElevation: Dp = ...): Unit' is deprecated. Use the overload where `headlineContent` is now a trailing `content` lambda.
+2026-11-17T07:57:23.1813256Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/Dialogs.kt:199:13 'fun TabRow(selectedTabIndex: Int, modifier: Modifier = ..., containerColor: Color = ..., contentColor: Color = ..., indicator: ComposableFunction1<List<TabPosition>, Unit> = ..., divider: ComposableFunction0<Unit> = ..., tabs: ComposableFunction0<Unit>): Unit' is deprecated. Replaced with PrimaryTabRow and SecondaryTabRow.
+2026-11-17T07:57:23.1841102Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/DrawerScreen.kt:90:51 'val Icons.Filled.DriveFileMove: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DriveFileMove.
+2026-11-17T07:57:23.1844581Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:45:88 'val Icons.Filled.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack.
+2026-11-17T07:57:23.1857341Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:106:41 'val Icons.Filled.Label: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Label.
+2026-11-17T07:57:23.1860971Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:115:41 'val Icons.Filled.Sort: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.Sort.
+2026-11-17T07:57:23.1864273Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:294:5 'fun ListItem(headlineContent: ComposableFunction0<Unit>, modifier: Modifier = ..., overlineContent: ComposableFunction0<Unit>? = ..., supportingContent: ComposableFunction0<Unit>? = ..., leadingContent: ComposableFunction0<Unit>? = ..., trailingContent: ComposableFunction0<Unit>? = ..., colors: ListItemColors = ..., tonalElevation: Dp = ..., shadowElevation: Dp = ...): Unit' is deprecated. Use the overload where `headlineContent` is now a trailing `content` lambda.
+2026-11-17T07:57:23.1869077Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:313:5 'fun ListItem(headlineContent: ComposableFunction0<Unit>, modifier: Modifier = ..., overlineContent: ComposableFunction0<Unit>? = ..., supportingContent: ComposableFunction0<Unit>? = ..., leadingContent: ComposableFunction0<Unit>? = ..., trailingContent: ComposableFunction0<Unit>? = ..., colors: ListItemColors = ..., tonalElevation: Dp = ..., shadowElevation: Dp = ...): Unit' is deprecated. Use the overload where `headlineContent` is now a trailing `content` lambda.
+2026-11-17T07:57:23.1902243Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:344:9 'fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = ..., enabled: Boolean = ..., valueRange: ClosedFloatingPointRange<Float> = ..., steps: Int = ..., onValueChangeFinished: (() -> Unit)? = ..., colors: SliderColors = ..., interactionSource: MutableInteractionSource = ...): Unit' is deprecated. Use the Slider overload that accepts SliderState, onValueChange, and onValueChangeFinished instead.
+2026-11-17T07:57:23.1933697Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/main/kotlin/com/pediycc/mydrawer/ui/SettingsScreen.kt:419:25 'fun ListItem(headlineContent: ComposableFunction0<Unit>, modifier: Modifier = ..., overlineContent: ComposableFunction0<Unit>? = ..., supportingContent: ComposableFunction0<Unit>? = ..., leadingContent: ComposableFunction0<Unit>? = ..., trailingContent: ComposableFunction0<Unit>? = ..., colors: ListItemColors = ..., tonalElevation: Dp = ..., shadowElevation: Dp = ...): Unit' is deprecated. Use the overload where `headlineContent` is now a trailing `content` lambda.
+2026-11-17T07:57:23.8630381Z 
+2026-11-17T07:57:23.8661113Z > Task :app:compressDebugJavaRes
+2026-11-17T07:57:23.9618048Z > Task :app:mergeDebugJavaResource
+2026-11-17T07:57:25.3641121Z > Task :app:compileDebugJavaWithJavac
+2026-11-17T07:57:25.4618602Z > Task :app:bundleDebugClassesToCompileJar
+2026-11-17T07:57:25.4619155Z > Task :app:bundleDebugClassesToRuntimeJar
+2026-11-17T07:57:26.1670126Z > Task :app:generateDebugLintReportModel
+2026-11-17T07:57:26.1701333Z > Task :app:generateDebugAndroidTestLintModel
+2026-11-17T07:57:26.1730826Z > Task :app:generateDebugUnitTestLintModel
+2026-11-17T07:57:27.0620800Z 
+2026-11-17T07:57:27.0651097Z > Task :app:compileDebugUnitTestKotlin
+2026-11-17T07:57:27.0667516Z w: file:///home/runner/work/MyDrawer/MyDrawer/app/src/test/kotlin/com/pediycc/mydrawer/data/SorterTest.kt:82:22 Redundant creation of Json format. Creating instances for each usage can be slow.
+2026-11-17T07:57:27.0709922Z 
+2026-11-17T07:57:27.0710887Z > Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+2026-11-17T07:57:27.0740743Z > Task :app:compressDebugUnitTestJavaRes FROM-CACHE
+2026-11-17T07:57:27.0767217Z > Task :app:extractDebugUnitTestJavaRes
+2026-11-17T07:57:28.2616923Z 
+2026-11-17T07:57:28.2618190Z > Task :app:testDebugUnitTest FAILED
+2026-11-17T07:57:28.2618965Z 
+2026-11-17T07:57:28.2619307Z 
+2026-11-17T07:57:28.2622062Z 10 tests completed, 1 failed
+2026-11-17T07:57:28.2622817Z SorterTest > frequent group takes top ten by usage FAILED
+2026-11-17T07:57:28.2630986Z     org.junit.ComparisonFailure at SorterTest.kt:75
+2026-11-17T07:57:32.5650378Z 
+2026-11-17T07:57:32.5681442Z > Task :app:lintAnalyzeDebugAndroidTest
+2026-11-17T07:57:36.7620665Z > Task :app:lintAnalyzeDebugUnitTest
+2026-11-17T07:57:54.2629483Z 
+2026-11-17T07:57:54.2630915Z > Task :app:lintAnalyzeDebug
+2026-11-17T07:57:54.2651257Z FAILURE: Build failed with an exception.
+2026-11-17T07:57:54.2652307Z gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1794902213928.json
+2026-11-17T07:57:54.2653020Z 
+2026-11-17T07:57:54.2653240Z 48 actionable tasks: 27 executed, 21 from cache
+2026-11-17T07:57:54.2653844Z * What went wrong:
+2026-11-17T07:57:54.2654260Z Execution failed for task ':app:testDebugUnitTest'.
+2026-11-17T07:57:54.2655181Z > There were failing tests. See the report at: file:///home/runner/work/MyDrawer/MyDrawer/app/build/reports/tests/testDebugUnitTest/index.html
+2026-11-17T07:57:54.2655879Z 
+2026-11-17T07:57:54.2656038Z * Try:
+2026-11-17T07:57:54.2656686Z > Run with --scan to get full insights from a Build Scan (powered by Develocity).
+2026-11-17T07:57:54.2657074Z 
+2026-11-17T07:57:54.2657228Z BUILD FAILED in 1m 5s
+2026-11-17T07:57:54.3631169Z Configuration cache entry stored.
+2026-11-17T07:57:54.7061729Z ##[error]Process completed with exit code 1.
+2026-11-17T07:57:54.7122475Z ##[group]Run actions/upload-artifact@v4
+2026-11-17T07:57:54.7122823Z with:
+2026-11-17T07:57:54.7123105Z   name: reports
+2026-11-17T07:57:54.7123439Z   path: app/build/reports/
+app/build/test-results/
+
+2026-11-17T07:57:54.7123818Z   retention-days: 7
+2026-11-17T07:57:54.7124113Z   if-no-files-found: warn
+2026-11-17T07:57:54.7124502Z   compression-level: 6
+2026-11-17T07:57:54.7124808Z   overwrite: false
+2026-11-17T07:57:54.7125139Z   include-hidden-files: false
+2026-11-17T07:57:54.7125435Z env:
+2026-11-17T07:57:54.7125812Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:57:54.7126285Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-17T07:57:54.7126737Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-17T07:57:54.7127130Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-17T07:57:54.7127505Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-17T07:57:54.7128143Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-17T07:57:54.7128594Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-17T07:57:54.7129089Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-17T07:57:54.7129470Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-17T07:57:54.7129997Z ##[endgroup]
+2026-11-17T07:57:54.8393543Z (node:2801) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-17T07:57:54.8394400Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-17T07:57:54.8495833Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-11-17T07:57:54.8497606Z The least common ancestor is /home/runner/work/MyDrawer/MyDrawer/app/build. This will be the root directory of the artifact
+2026-11-17T07:57:54.8498906Z With the provided path, there will be 11 files uploaded
+2026-11-17T07:57:54.8499836Z Artifact name is valid!
+2026-11-17T07:57:54.8500206Z Root directory input is valid!
+2026-11-17T07:57:55.4386923Z Beginning upload of artifact content to blob storage
+2026-11-17T07:57:55.4624176Z (node:2801) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-17T07:57:55.8637812Z Uploaded bytes 14108
+2026-11-17T07:57:55.9558792Z Finished uploading artifact content to blob storage!
+2026-11-17T07:57:55.9559487Z SHA256 digest of uploaded artifact zip is f1d8b06c2672fd35f1e4a8fba4468ffe9a2408da1530690087151b04e1f7f5b3
+2026-11-17T07:57:55.9560418Z Finalizing artifact upload
+2026-11-17T07:57:56.4040460Z Artifact reports.zip successfully finalized. Artifact ID 14310425898
+2026-11-17T07:57:56.4041079Z Artifact reports has been successfully uploaded! Final size is 14108 bytes. Artifact ID is 14310425898
+2026-11-17T07:57:56.4046123Z Artifact download URL: https://github.com/PediyCCDebuger/MyDrawer/actions/runs/44042556945/artifacts/14310425898
+2026-11-17T07:57:56.4235478Z Post job cleanup.
+2026-11-17T07:57:56.6086508Z In post-action step
+2026-11-17T07:57:56.6094074Z ##[group]Stopping Gradle daemons
+2026-11-17T07:57:56.6094927Z Stopping Gradle daemons for /home/runner/.gradle/wrapper/dists/gradle-9.8.2-bin/8wepis63pzuhrlfaiy04bagwu/gradle-9.8.2
+2026-11-17T07:57:56.6105126Z [command]/home/runner/.gradle/wrapper/dists/gradle-9.8.2-bin/8wepis63pzuhrlfaiy04bagwu/gradle-9.8.2/bin/gradle --stop
+2026-11-17T07:57:57.1159335Z Stopping Daemon(s)
+2026-11-17T07:57:57.1160876Z 1 Daemon stopped
+2026-11-17T07:57:57.1288141Z ##[endgroup]
+2026-11-17T07:57:57.1289208Z Not performing cache-cleanup due to build failure
+2026-11-17T07:57:57.1290380Z ##[group]Caching Gradle state
+2026-11-17T07:57:57.1365247Z Not saving configuration-cache state, as no encryption key was provided
+2026-11-17T07:57:57.5795466Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --files-from manifest.txt --use-compress-program zstdmt
+2026-11-17T07:58:00.0613192Z Sent 423003 of 201749595 (0.2%), 0.4 MBs/sec
+2026-11-17T07:58:01.0613504Z Sent 423003 of 201749595 (0.2%), 0.2 MBs/sec
+2026-11-17T07:58:01.5519172Z Sent 201749595 of 201749595 (100.0%), 77.2 MBs/sec
+2026-11-17T07:58:01.8623150Z Saved cache entry with key gradle-transforms-v1-21547d8de5ecf68fd73986ff9008fc49 from /home/runner/.gradle/caches/transforms-4/*/,/home/runner/.gradle/caches/*/transforms/*/ in 4466ms
+2026-11-17T07:58:02.0272286Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/MyDrawer/MyDrawer --files-from manifest.txt --use-compress-program zstdmt
+2026-11-17T07:58:03.3652584Z Sent 10485760 of 28305756 (37.0%), 10.0 MBs/sec
+2026-11-17T07:58:03.9248623Z Sent 28305756 of 28305756 (100.0%), 17.3 MBs/sec
+2026-11-17T07:58:04.2038001Z Saved cache entry with key gradle-home-v1|Linux-X64|build[b8a35c2f917259958c9abe8f2ff1b5ff]-4d9cc79cdaf566dcbbfba99f6b214d2f5bee4394 from /home/runner/.gradle/caches,/home/runner/.gradle/notifications,/home/runner/.gradle/.setup-gradle in 2185ms
+2026-11-17T07:58:04.2039436Z ##[endgroup]
+2026-11-17T07:58:04.2044484Z Generating Job Summary
+2026-11-17T07:58:04.2054517Z Completed post-action step
+2026-11-17T07:58:04.2218301Z Post job cleanup.
+2026-11-17T07:58:04.3261758Z (node:2883) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-17T07:58:04.3262589Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-17T07:58:04.3393225Z Post job cleanup.
+2026-11-17T07:58:04.4056641Z [command]/usr/bin/git version
+2026-11-17T07:58:04.4088522Z git version 2.56.1
+2026-11-17T07:58:04.4113386Z Temporarily overriding HOME='/home/runner/work/_temp/a1d94645-e1ca-4e29-a275-e2b303ec0d3e' before making global git config changes
+2026-11-17T07:58:04.4114408Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-17T07:58:04.4116967Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/MyDrawer/MyDrawer
+2026-11-17T07:58:04.4160788Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-17T07:58:04.4187959Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-17T07:58:04.4462029Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-17T07:58:04.4474786Z http.https://github.com/.extraheader
+2026-11-17T07:58:04.4511460Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-17T07:58:04.4522536Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-17T07:58:04.4781123Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-17T07:58:04.4813785Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-17T07:58:04.5105863Z Cleaning up orphan processes
+2026-11-17T07:58:04.5353868Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-java@v4, actions/upload-artifact@v4, gradle/actions/setup-gradle@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
