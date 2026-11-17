@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.text.LocalTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,8 +33,7 @@ import com.pediycc.mydrawer.data.Updater
  * 抽屉里的文字都直接叠在壁纸上。仿原版 Launcher 做法：白字 + 黑色投影，
  * 这样无论浅色还是深色壁纸都清晰可读（原版 drawer.xml 文字色 #FFFFFFFF，靠阴影保证对比）。
  */
-@Composable
-private fun wallpaperTextStyle(): TextStyle = LocalTextStyle.current.copy(
+private val WallpaperTextShadowStyle = TextStyle(
     shadow = Shadow(color = Color(0xCC000000), offset = Offset(0f, 1f), blurRadius = 4f),
 )
 
@@ -89,7 +87,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
                             if (state.selectMode) "已选择 ${state.selected.size} 项"
                             else vm.categoryLabel(state.selectedCategory),
                             color = Color.White,
-                            style = wallpaperTextStyle(),
+                            style = WallpaperTextShadowStyle,
                         )
                     },
                     navigationIcon = {
@@ -251,9 +249,9 @@ private fun AppArea(
             value = state.query,
             onValueChange = { vm.setQuery(it) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            placeholder = { Text("搜索应用", color = Color(0xFFE0E0E0), style = wallpaperTextStyle()) },
+            placeholder = { Text("搜索应用", color = Color(0xFFE0E0E0), style = WallpaperTextShadowStyle) },
             singleLine = true,
-            textStyle = wallpaperTextStyle().copy(fontSize = 15.sp),
+            textStyle = WallpaperTextShadowStyle.copy(fontSize = 15.sp),
             leadingIcon = { Icon(Icons.Filled.Search, null, tint = Color.White) },
             trailingIcon = {
                 if (state.query.isNotEmpty()) {
@@ -329,7 +327,7 @@ private fun CategoryRail(
                 Icon(Icons.Filled.Apps, "全部", tint = Color.White, modifier = Modifier.size(26.dp))
             }
             if (prefs.showCategoryLabels) {
-                Text("全部", color = Color.White, fontSize = 11.sp, maxLines = 1, style = wallpaperTextStyle())
+                Text("全部", color = Color.White, fontSize = 11.sp, maxLines = 1, style = WallpaperTextShadowStyle)
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -364,7 +362,7 @@ private fun CategoryRail(
                         fontSize = 11.sp,
                         maxLines = 1,
                         textAlign = TextAlign.Center,
-                        style = wallpaperTextStyle(),
+                        style = WallpaperTextShadowStyle,
                     )
                 }
             }
@@ -392,7 +390,7 @@ private fun AppGrid(
                     vm.categoryLabel(catId),
                     color = Color(0xFFDCE8FF),
                     fontSize = 14.sp,
-                    style = wallpaperTextStyle(),
+                    style = WallpaperTextShadowStyle,
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0x44000000))
@@ -456,7 +454,7 @@ private fun AppTile(
                 app.label,
                 color = Color.White,
                 fontSize = 12.sp,
-                style = wallpaperTextStyle(),
+                style = WallpaperTextShadowStyle,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
