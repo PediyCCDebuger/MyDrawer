@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -15,9 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pediycc.mydrawer.BuildConfig
 import com.pediycc.mydrawer.data.AppInfo
 import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
@@ -25,7 +28,6 @@ import com.pediycc.mydrawer.data.CategoryDef
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
-import com.pediycc.mydrawer.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,10 +41,10 @@ fun AppMenuSheet(
     onRename: () -> Unit,
     onIcon: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF1E2228)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF2A2D31)) {
         Column(Modifier.padding(16.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
             Text(app.label, style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA3AD))
+            Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = DrawerColors.DialogSecondary)
             Spacer(Modifier.height(12.dp))
             MenuItem(Icons.Filled.Launch, "启动应用", onLaunch)
             MenuItem(Icons.Filled.Edit, "重命名", onRename)
@@ -53,7 +55,7 @@ fun AppMenuSheet(
                 onToggleHidden,
             )
             Spacer(Modifier.height(8.dp))
-            Text("移动到分类", style = MaterialTheme.typography.labelLarge, color = Color(0xFF8FB4FF))
+            Text("移动到分类", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
             Categories.ALL.forEach { cat ->
                 MenuItem(
                     if (cat.id == app.categoryId) Icons.Filled.CheckCircle else Icons.Filled.ArrowForward,
@@ -77,7 +79,7 @@ fun CategoryMenuSheet(
     onIcon: () -> Unit,
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF1E2228)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF2A2D31)) {
         Column(Modifier.padding(16.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
             Text(
                 vm.categoryLabel(categoryId),
@@ -90,7 +92,7 @@ fun CategoryMenuSheet(
             MenuItem(Icons.Filled.ArrowUpward, "分类上移", { vm.moveCategory(categoryId, -1) })
             MenuItem(Icons.Filled.ArrowDownward, "分类下移", { vm.moveCategory(categoryId, 1) })
             Spacer(Modifier.height(8.dp))
-            Text("此分类内应用排序", style = MaterialTheme.typography.labelLarge, color = Color(0xFF8FB4FF))
+            Text("此分类内应用排序", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
             SortMode.LABELS.forEach { (mode, label) ->
                 MenuItem(
                     if (mode == currentMode) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
@@ -100,7 +102,7 @@ fun CategoryMenuSheet(
             }
             if (currentMode == SortMode.MANUAL) {
                 Spacer(Modifier.height(8.dp))
-                Text("手动排序（点箭头调整）", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9AA3AD))
+                Text("手动排序（点箭头调整）", style = MaterialTheme.typography.labelSmall, color = DrawerColors.DialogSecondary)
                 val apps = remember(prefs) { com.pediycc.mydrawer.data.Sorter.manualOrderOf(vm.ui.value.apps, prefs, categoryId) }
                 apps.forEachIndexed { index, pkg ->
                     val label = vm.ui.value.apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
@@ -141,23 +143,26 @@ fun MoveDialog(
     onDismiss: () -> Unit,
     onPick: (String) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("移动到分类") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                categories.filter { it.id != Categories.FREQUENT }.forEach { cat ->
-                    ListItem(
-                        headlineContent = { Text(labelOf(cat.id)) },
-                        modifier = Modifier.clickable { onPick(cat.id) },
-                    )
-                }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("移动到分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+            categories.filter { it.id != Categories.FREQUENT }.forEach { cat ->
+                ListItem(
+                    headlineContent = { Text(labelOf(cat.id), color = Color.White) },
+                    modifier = Modifier.clickable { onPick(cat.id) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+        }
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TextInputDialog(
     title: String,
@@ -166,22 +171,35 @@ fun TextInputDialog(
     onConfirm: (String) -> Unit,
 ) {
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                label = { Text("名称") },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { if (text.isNotBlank()) onConfirm(text) }) { Text("确定") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            singleLine = true,
+            label = { Text("名称", color = DrawerColors.DialogSecondary) },
+            textStyle = TextStyle(color = Color.White),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = DrawerColors.Accent,
+                unfocusedBorderColor = Color(0x88FFFFFF),
+                focusedLabelColor = DrawerColors.Accent,
+                unfocusedLabelColor = DrawerColors.DialogSecondary,
+                cursorColor = Color.White,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = { if (text.isNotBlank()) onConfirm(text) }) {
+                Text("确定", color = DrawerColors.Accent)
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -194,12 +212,16 @@ fun IconPickerSheet(
 ) {
     var tab by remember { mutableIntStateOf(0) }
     val titles = listOf("内置图库", "本机图库", "应用原图标")
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF1E2228)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF2A2D31)) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("更改图标", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            TabRow(selectedTabIndex = tab) {
+            TabRow(
+                selectedTabIndex = tab,
+                containerColor = Color(0xFF2A2D31),
+                contentColor = Color.White,
+            ) {
                 titles.forEachIndexed { index, title ->
-                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title) })
+                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title, color = Color.White) })
                 }
             }
             when (tab) {
@@ -243,7 +265,18 @@ fun IconPickerSheet(
                         Column(Modifier.padding(vertical = 24.dp)) {
                             Text("可输入应用包名，使用该应用的图标作为分类图标。", color = Color.White)
                             var pkg by remember { mutableStateOf("") }
-                            OutlinedTextField(value = pkg, onValueChange = { pkg = it }, label = { Text("包名") })
+                            OutlinedTextField(
+                                value = pkg,
+                                onValueChange = { pkg = it },
+                                label = { Text("包名", color = DrawerColors.DialogSecondary) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = DrawerColors.Accent,
+                                    unfocusedBorderColor = Color(0x88FFFFFF),
+                                    cursorColor = Color.White,
+                                ),
+                            )
                             Spacer(Modifier.height(12.dp))
                             Button(onClick = {
                                 if (target is IconTarget.Category && pkg.isNotBlank()) {
@@ -259,11 +292,13 @@ fun IconPickerSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
     var info by remember { mutableStateOf<Updater.ReleaseInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(true) }
+    var proxyExpanded by remember { mutableStateOf(false) }
     val prefs by vm.ui.collectAsState()
     LaunchedEffect(Unit) {
         vm.checkUpdate { release, err ->
@@ -272,56 +307,67 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
             checking = false
         }
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("检查更新") },
-        text = {
-            Column {
-                Text("当前版本 ${BuildConfig.VERSION_NAME}")
-                Spacer(Modifier.height(8.dp))
-                when {
-                    checking -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp)); Text("正在检查…")
-                    }
-                    info != null -> {
-                        Text("发现新版本：${info!!.tag}")
-                        Text(
-                            info!!.body.take(300).ifBlank { "暂无更新说明" },
-                            fontSize = 12.sp,
-                            color = Color(0xFF9AA3AD),
-                            modifier = Modifier.padding(top = 8.dp).heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
-                        )
-                    }
-                    else -> Text(error ?: "暂未发现更新")
-                }
-                Spacer(Modifier.height(8.dp))
-                var expanded by remember { mutableStateOf(false) }
-                Box {
-                    Button(onClick = { expanded = true }) { Text("代理：${prefs.prefs.updateProxy}") }
-                    DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                        Updater.PROXIES.forEach { p ->
-                            DropdownMenuItem(
-                                text = { Text(p) },
-                                onClick = {
-                                    vm.updatePrefs { it.copy(updateProxy = p) }
-                                    expanded = false
-                                    checking = true
-                                    vm.checkUpdate { release, err ->
-                                        info = release; error = err; checking = false
-                                    }
-                                },
-                            )
-                        }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("检查更新", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        Text("当前版本 ${BuildConfig.VERSION_NAME}", color = DrawerColors.DialogText)
+        Spacer(Modifier.height(8.dp))
+        when {
+            checking -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(20.dp), color = DrawerColors.Accent)
+                Spacer(Modifier.width(8.dp)); Text("正在检查…", color = DrawerColors.DialogText)
+            }
+            info != null -> {
+                Text("发现新版本：${info!!.tag}", color = DrawerColors.DialogText)
+                Text(
+                    info!!.body.take(300).ifBlank { "暂无更新说明" },
+                    fontSize = 12.sp,
+                    color = DrawerColors.DialogSecondary,
+                    modifier = Modifier.padding(top = 8.dp).heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
+                )
+            }
+            else -> Text(error ?: "暂未发现更新", color = DrawerColors.DialogText)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("下载代理：${prefs.prefs.updateProxy}", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+        TextButton(onClick = { proxyExpanded = !proxyExpanded }) {
+            Text(if (proxyExpanded) "收起代理列表" else "更换代理", color = DrawerColors.Accent)
+        }
+        // 不用 DropdownMenu：弹出层会套用系统浅色主题导致白底白字。
+        // 直接在对话框内展开列表，保持与原版深色对话框一致。
+        if (proxyExpanded) {
+            Column(Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())) {
+                Updater.PROXIES.forEach { p ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.updatePrefs { it.copy(updateProxy = p) }
+                                proxyExpanded = false
+                                checking = true
+                                vm.checkUpdate { release, err ->
+                                    info = release; error = err; checking = false
+                                }
+                            }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = p == prefs.prefs.updateProxy, onClick = {})
+                        Spacer(Modifier.width(4.dp))
+                        Text(p, color = Color.White, fontSize = 12.sp)
                     }
                 }
             }
-        },
-        confirmButton = {
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("关闭", color = DrawerColors.DialogText) }
             if (info != null) {
-                TextButton(onClick = { vm.downloadAndInstall(info!!); onDismiss() }) { Text("下载并安装") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = { vm.downloadAndInstall(info!!); onDismiss() }) {
+                    Text("下载并安装", color = DrawerColors.Accent)
+                }
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
-    )
+        }
+    }
 }

@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 对齐原版 Theme.MyTheme（parent=Theme.Holo.Wallpaper.NoTitleBar）：
+         仅把窗口背景设成透明还不够，必须开启 windowShowWallpaper，
+         系统才会在窗口后面绘制壁纸。PrefMain 设置页也继承这一主题。 -->
     <style name="Theme.MyDrawer" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowBackground">@null</item>
+        <item name="android:windowShowWallpaper">true</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
     </style>
 </resources>

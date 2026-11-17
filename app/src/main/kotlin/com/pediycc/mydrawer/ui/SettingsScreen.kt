@@ -12,19 +12,41 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
-import com.pediycc.mydrawer.data.BuiltInIcons
-import com.pediycc.mydrawer.data.Categories
+import com.pediycc.mydrawer.BuildConfig
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
-import com.pediycc.mydrawer.BuildConfig
+
+@Composable
+private fun drawerSwitchColors() = SwitchDefaults.colors(
+    checkedTrackColor = DrawerColors.Accent,
+    uncheckedTrackColor = Color(0x66FFFFFF),
+    checkedThumbColor = Color.White,
+    uncheckedThumbColor = Color(0xEEEEEE),
+)
+
+@Composable
+private fun drawerCheckboxColors() = CheckboxDefaults.colors(
+    checkedColor = DrawerColors.Accent,
+    uncheckedColor = Color.White,
+    checkmarkColor = Color.Black,
+)
+
+@Composable
+private fun drawerSliderColors() = SliderDefaults.colors(
+    thumbColor = DrawerColors.Accent,
+    activeTrackColor = DrawerColors.Accent,
+    inactiveTrackColor = Color(0x66FFFFFF),
+)
 
 /**
- * 设置页：按原版 Smart Drawer「应用网格 / 安全 / 程式列表」分组复刻，全中文。
- * 英文原项在注释中保留，便于对照逆向规格。
+ * 设置页对齐原版：PrefMain 继承 application 的 Theme.MyTheme（Holo.Wallpaper），
+ * 因此整个页面透出壁纸，列表行是半透明暗底 + 白字 + 细分隔线。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,19 +58,29 @@ fun SettingsScreen(
     onImport: () -> Unit,
 ) {
     var hiddenManage by remember { mutableStateOf(false) }
-    var columnsDialog by remember { mutableStateOf<Boolean?>(null) } // true=直式 false=横式
+    var columnsDialog by remember { mutableStateOf<Boolean?>(null) } // true=竖屏 false=横屏
     var pinDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                ),
+                title = { Text("设置", style = WallpaperTextShadowStyle) },
                 navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Filled.ArrowBack, "返回") } },
             )
         },
     ) { padding ->
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(Color(0x33000000)),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             // ---- 应用网格（原 pref_drawer / App grid） ----
@@ -65,8 +97,8 @@ fun SettingsScreen(
             }
             item {
                 StepperRow(
-                    title = "图示大小",
-                    subtitle = "原版：Icon Size",
+                    title = "图标大小",
+                    subtitle = "原版：Icon Size · 当前 ${prefs.iconSizePercent}%",
                     value = prefs.iconSizePercent,
                     range = 60..140,
                     step = 10,
@@ -76,7 +108,7 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "规范化图示",
+                    title = "图标规范化",
                     subtitle = "自动调整大小以符合 Material 设计规范（原版：Normalize icons）",
                     icon = Icons.Filled.AutoAwesome,
                     checked = true,
@@ -86,7 +118,7 @@ fun SettingsScreen(
             }
             item {
                 SettingsRow(
-                    title = "直式列数",
+                    title = "竖屏列数",
                     subtitle = "原版：Portrait Columns · 当前 ${prefs.gridColumns} 列",
                     icon = Icons.Filled.ViewColumn,
                     onClick = { columnsDialog = true },
@@ -94,7 +126,7 @@ fun SettingsScreen(
             }
             item {
                 SettingsRow(
-                    title = "横式列数",
+                    title = "横屏列数",
                     subtitle = "原版：Landscape Columns · 当前 ${prefs.landscapeColumns} 列",
                     icon = Icons.Filled.GridView,
                     onClick = { columnsDialog = false },
@@ -102,7 +134,7 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "图标标签",
+                    title = "显示图标名称",
                     subtitle = "在应用图标旁显示名称（原版：Icons label Visibility）",
                     icon = Icons.Filled.Label,
                     checked = prefs.showAppLabels,
@@ -140,6 +172,7 @@ fun SettingsScreen(
                         Checkbox(
                             checked = prefs.showSystemApps,
                             onCheckedChange = { vm.setShowSystemApps(it) },
+                            colors = drawerCheckboxColors(),
                         )
                     },
                 )
@@ -150,15 +183,15 @@ fun SettingsScreen(
                     subtitle = "原版：Use PIN · 隐藏应用需输入密码（预留）",
                     icon = Icons.Filled.Pin,
                     onClick = { pinDialog = true },
-                    trailing = { Text("预留", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailing = { Text("预留", color = DrawerColors.DialogSecondary) },
                 )
             }
 
-            // ---- 程式列表（原 drawerTitle / Drawer） ----
-            item { SectionTitle("程式列表") }
+            // ---- 程序列表（原 drawerTitle / Drawer） ----
+            item { SectionTitle("程序列表") }
             item {
                 SwitchRow(
-                    title = "左手控制",
+                    title = "左手模式",
                     subtitle = "将分类列表显示于画面右方（原版：Left-handed）",
                     icon = Icons.Filled.SwapHoriz,
                     checked = prefs.leftHanded,
@@ -167,7 +200,7 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "类别名称",
+                    title = "分类名称",
                     subtitle = "在分类图标附近显示名称（原版：Categories Label）",
                     icon = Icons.Filled.Category,
                     checked = prefs.showCategoryLabels,
@@ -185,7 +218,7 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "最常用分类",
+                    title = "常用应用分类",
                     subtitle = "按使用频率自动排列最常用的 10 个应用（原版：Promoted apps）",
                     icon = Icons.Filled.Star,
                     checked = prefs.frequentEnabled,
@@ -194,7 +227,7 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "应用程序由底部堆起",
+                    title = "应用从底部排列",
                     subtitle = "从底部开始显示应用（原版：Stack apps from bottom）",
                     icon = Icons.Filled.VerticalAlignBottom,
                     checked = prefs.stackFromBottom,
@@ -203,7 +236,7 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "显示菜单按钮",
+                    title = "显示更新按钮",
                     subtitle = "在右上角显示更新按钮（原版：Show menu button）",
                     icon = Icons.Filled.Menu,
                     checked = prefs.showMenuButton,
@@ -216,7 +249,7 @@ fun SettingsScreen(
             item {
                 SettingsRow(
                     title = "导出配置备份",
-                    subtitle = "对应右上角软盘图标 💾",
+                    subtitle = "对应右上角软盘图标",
                     icon = Icons.Filled.Save,
                     onClick = onExport,
                 )
@@ -224,7 +257,7 @@ fun SettingsScreen(
             item {
                 SettingsRow(
                     title = "导入配置备份",
-                    subtitle = "对应右上角时钟图标 🕘",
+                    subtitle = "对应右上角时钟图标",
                     icon = Icons.Filled.Restore,
                     onClick = onImport,
                 )
@@ -242,7 +275,7 @@ fun SettingsScreen(
             item {
                 Text(
                     "MyDrawer ${BuildConfig.VERSION_NAME} · 仿 Smart Drawer 1.0.3 界面与功能，独立重写，未复制原版代码。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color(0xEEFFFFFF),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(16.dp),
                 )
@@ -265,12 +298,15 @@ fun SettingsScreen(
         )
     }
     if (pinDialog) {
-        AlertDialog(
-            onDismissRequest = { pinDialog = false },
-            title = { Text("使用 PIN") },
-            text = { Text("此版本暂未启用 PIN 锁，功能预留。隐藏应用仍可通过长按菜单管理。") },
-            confirmButton = { TextButton(onClick = { pinDialog = false }) { Text("知道了") } },
-        )
+        ThemedDialog(onDismissRequest = { pinDialog = false }) {
+            Text("使用 PIN", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(12.dp))
+            Text("此版本暂未启用 PIN 锁，功能预留。隐藏应用仍可通过长按菜单管理。", color = DrawerColors.DialogText)
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { pinDialog = false }) { Text("知道了", color = DrawerColors.Accent) }
+            }
+        }
     }
 }
 
@@ -279,8 +315,12 @@ private fun SectionTitle(text: String) {
     Text(
         text,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        color = Color.White,
+        style = WallpaperTextShadowStyle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0x33000000))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     )
 }
 
@@ -292,14 +332,23 @@ private fun SettingsRow(
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
-        leadingContent = { Icon(icon, null) },
-        trailingContent = trailing,
-        modifier = Modifier.clickable(onClick = onClick),
-    )
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    Box(Modifier.fillMaxWidth().background(Color(0x33000000))) {
+        ListItem(
+            headlineContent = { Text(title, color = Color.White, style = WallpaperTextShadowStyle) },
+            supportingContent = {
+                Text(
+                    subtitle,
+                    style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
+                    color = Color(0xDDFFFFFF),
+                )
+            },
+            leadingContent = { Icon(icon, null, tint = Color(0xFFE8EEF7)) },
+            trailingContent = trailing,
+            modifier = Modifier.clickable(onClick = onClick),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+    }
+    HorizontalDivider(color = Color(0x3FFFFFFF))
 }
 
 @Composable
@@ -311,15 +360,24 @@ private fun SwitchRow(
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
-        leadingContent = { Icon(icon, null) },
-        trailingContent = {
-            Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
-        },
-    )
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    Box(Modifier.fillMaxWidth().background(Color(0x33000000))) {
+        ListItem(
+            headlineContent = { Text(title, color = Color.White, style = WallpaperTextShadowStyle) },
+            supportingContent = {
+                Text(
+                    subtitle,
+                    style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
+                    color = Color(0xDDFFFFFF),
+                )
+            },
+            leadingContent = { Icon(icon, null, tint = Color(0xFFE8EEF7)) },
+            trailingContent = {
+                Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange, colors = drawerSwitchColors())
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+    }
+    HorizontalDivider(color = Color(0x3FFFFFFF))
 }
 
 @Composable
@@ -332,26 +390,32 @@ private fun StepperRow(
     suffix: String,
     onValue: (Int) -> Unit,
 ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().background(Color(0x33000000)).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.PhotoSizeSelectSmall, null)
+            Icon(Icons.Filled.PhotoSizeSelectSmall, null, tint = Color(0xFFE8EEF7))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, color = Color.White, style = WallpaperTextShadowStyle)
+                Text(
+                    subtitle,
+                    style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
+                    color = Color(0xDDFFFFFF),
+                )
             }
-            Text("$value$suffix")
+            Text("$value$suffix", color = Color.White)
         }
         Slider(
             value = value.toFloat(),
             onValueChange = { onValue(((it / step).toInt() * step).coerceIn(range.first, range.last)) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = (range.last - range.first) / step - 1,
+            colors = drawerSliderColors(),
         )
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    HorizontalDivider(color = Color(0x3FFFFFFF))
 }
 
+/** 用深色对话框代替 DropdownMenu，避免弹出层套用系统浅色主题造成白底白字。 */
 @Composable
 private fun <T> ListSettingsRow(
     title: String,
@@ -361,20 +425,36 @@ private fun <T> ListSettingsRow(
     selected: T,
     onSelect: (T) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        SettingsRow(title, subtitle, icon, { expanded = true })
-        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (value, label) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = { onSelect(value); expanded = false },
-                )
+    var show by remember { mutableStateOf(false) }
+    SettingsRow(title, subtitle, icon, { show = true })
+    if (show) {
+        ThemedDialog(onDismissRequest = { show = false }) {
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(12.dp))
+            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                options.forEach { (value, label) ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(value); show = false }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = value == selected, onClick = { onSelect(value); show = false })
+                        Spacer(Modifier.width(4.dp))
+                        Text(label, color = Color.White)
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { show = false }) { Text("取消", color = DrawerColors.DialogText) }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ColumnDialog(
     portrait: Boolean,
@@ -384,50 +464,64 @@ private fun ColumnDialog(
 ) {
     val current = if (portrait) prefs.gridColumns else prefs.landscapeColumns
     val values = if (portrait) (2..8).toList() else (2..10).toList()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (portrait) "直式列数" else "横式列数") },
-        text = {
-            Column {
-                values.forEach { n ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onPick(n) }.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = current == n, onClick = { onPick(n) })
-                        Spacer(Modifier.width(8.dp)); Text("$n 列")
-                    }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text(if (portrait) "竖屏列数" else "横屏列数", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        Column {
+            values.forEach { n ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(n) }.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = current == n,
+                        onClick = { onPick(n) },
+                        colors = RadioButtonDefaults.colors(selectedColor = DrawerColors.Accent, unselectedColor = Color.White),
+                    )
+                    Spacer(Modifier.width(8.dp)); Text("$n 列", color = Color.White)
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+        }
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HiddenAppsDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
     val hidden = prefs.hiddenPackages.toList()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("管理隐藏应用（${hidden.size}）") },
-        text = {
-            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                if (hidden.isEmpty()) {
-                    Text("暂无隐藏应用。长按应用图标可隐藏。")
-                } else {
-                    hidden.forEach { pkg ->
-                        val label = vm.ui.value.apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
-                        ListItem(
-                            headlineContent = { Text(label) },
-                            supportingContent = { Text(pkg, style = MaterialTheme.typography.bodySmall) },
-                            trailingContent = {
-                                TextButton(onClick = { vm.toggleHidden(pkg) }) { Text("显示") }
-                            },
-                        )
-                    }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("管理隐藏应用（${hidden.size}）", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+            if (hidden.isEmpty()) {
+                Text("暂无隐藏应用。长按应用图标可隐藏。", color = DrawerColors.DialogText)
+            } else {
+                hidden.forEach { pkg ->
+                    val label = vm.ui.value.apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
+                    ListItem(
+                        headlineContent = { Text(label, color = Color.White) },
+                        supportingContent = {
+                            Text(
+                                pkg,
+                                style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
+                                color = DrawerColors.DialogSecondary,
+                            )
+                        },
+                        trailingContent = {
+                            TextButton(onClick = { vm.toggleHidden(pkg) }) { Text("显示", color = DrawerColors.Accent) }
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
-    )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("关闭", color = DrawerColors.DialogText) }
+        }
+    }
 }

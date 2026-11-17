@@ -59,6 +59,14 @@
 - 13 套设置页（`pref_01_global_settings.xml` … `pref_11_developers.xml`）
 - 原版启动图标为默认 Android 机器人，无复用价值 → 新项目重新设计
 
+## 5.1 主题与透明背景（2026-11-17 jadx 复验）
+
+- `AndroidManifest.xml`：application 主题 `@style/Theme.MyTheme`；主 Activity `ginlemon.flower.HomeScreen`；设置页 `ginlemon.flower.preferences.PrefMain` 未覆盖主题，因此同样继承该主题。
+- `res/values/styles.xml`：`Theme.MyTheme` 的 parent 是 `@android:style/Theme.Holo.Wallpaper.NoTitleBar`。关键点：该父主题设置 `android:windowShowWallpaper=true` 且 `windowBackground` 为空，系统才会在 Activity 窗口后绘制壁纸。仅把窗口背景设为透明（MyDrawer 2.1.0 的做法）仍会呈现黑底。
+- `res/drawable/catlist_bg.xml`：分类栏背景为 `#20FFFFFF` 白色磨砂；与白字 + 黑色投影配合（`res/layout/drawer.xml` 中 `action_title`/`searchBox` 文字为 `#fff`）。
+- 深色对话框：`MaterialDarkDialog` 的 `windowBackground` 为 `@drawable/mtrl_dark_dialog_bg`（约 `#303030` 的深色圆角 9-patch）。`ginlemon.library.p.g()` 在 API≥21 用 `AlertDialog.Builder(context, 5)`（Material 深色系）创建对话框。
+- MyDrawer 2.2.0 据此在 `themes.xml` 与窗口 flag 两处开启 `windowShowWallpaper`；所有弹窗统一为约 `#303030` 深色圆角 + 白字；设置页改为半透明磨砂列表。
+
 ## 6. 重写取舍
 
 保留：首次启动自动载入全部应用、按规则自动分类、分类抽屉网格、多选批量、隐藏应用、配置备份导出导入、A-Z/搜索。

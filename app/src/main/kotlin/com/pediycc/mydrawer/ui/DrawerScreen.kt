@@ -1,5 +1,6 @@
 package com.pediycc.mydrawer.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -16,10 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,17 +27,9 @@ import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 
-/**
- * 抽屉里的文字都直接叠在壁纸上。仿原版 Launcher 做法：白字 + 黑色投影，
- * 这样无论浅色还是深色壁纸都清晰可读（原版 drawer.xml 文字色 #FFFFFFFF，靠阴影保证对比）。
- */
-private val WallpaperTextShadowStyle = TextStyle(
-    shadow = Shadow(color = Color(0xCC000000), offset = Offset(0f, 1f), blurRadius = 4f),
-)
-
 /** 透明背景时只铺一层极淡的暗幕压住壁纸高光，仍可清楚透出壁纸；不透明时用深色实底。 */
 private fun scrimColorOf(transparent: Boolean): Color =
-    if (transparent) Color(0x2E000000) else Color(0xFF101217)
+    if (transparent) DrawerColors.ScrimOverWallpaper else Color(0xFF101217)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +37,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
     val state by vm.ui.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
     var menuApp by remember { mutableStateOf<AppInfo?>(null) }
     var menuCategory by remember { mutableStateOf<String?>(null) }
     var moveCategoryOpen by remember { mutableStateOf(false) }
@@ -106,6 +97,12 @@ fun DrawerScreen(vm: DrawerViewModel) {
                                 Icon(Icons.Filled.DriveFileMove, "移动到分类", tint = Color.White)
                             }
                         } else {
+                            IconButton(onClick = {
+                                searchOpen = !searchOpen
+                                if (!searchOpen) vm.setQuery("")
+                            }) {
+                                Icon(Icons.Filled.Search, "搜索", tint = Color.White)
+                            }
                             IconButton(onClick = { vm.setSelectMode(true) }) {
                                 Icon(Icons.Filled.Checklist, "多选", tint = Color.White)
                             }
@@ -143,11 +140,15 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     )
                 }
                 if (state.prefs.leftHanded) {
-                    Box(Modifier.weight(1f)) { AppArea(vm, state, onMenu = { menuApp = it }) }
+                    Box(Modifier.weight(1f)) {
+                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it })
+                    }
                     rail()
                 } else {
                     rail()
-                    Box(Modifier.weight(1f)) { AppArea(vm, state, onMenu = { menuApp = it }) }
+                    Box(Modifier.weight(1f)) {
+                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it })
+                    }
                 }
             }
         }
@@ -236,40 +237,47 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onGallery = { galleryLauncher.launch(arrayOf("image/*")) },
         )
     }
+
+    // 设置页是主界面上的一层，不是独立 Activity；按系统返回键应与左上角箭头一样返回抽屉。
+    // 放在最后注册，保证优先于主界面的默认返回行为，不会直接退出应用。
+    BackHandler(enabled = showSettings) { showSettings = false }
 }
 
 @Composable
 private fun AppArea(
     vm: DrawerViewModel,
     state: com.pediycc.mydrawer.ui.DrawerUiState,
+    searchOpen: Boolean,
+    onSearchToggle: () -> Unit,
     onMenu: (AppInfo) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = { vm.setQuery(it) },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            placeholder = { Text("搜索应用", color = Color(0xFFE0E0E0), style = WallpaperTextShadowStyle) },
-            singleLine = true,
-            textStyle = WallpaperTextShadowStyle.copy(fontSize = 15.sp),
-            leadingIcon = { Icon(Icons.Filled.Search, null, tint = Color.White) },
-            trailingIcon = {
-                if (state.query.isNotEmpty()) {
-                    IconButton(onClick = { vm.setQuery("") }) {
-                        Icon(Icons.Filled.Close, "清除", tint = Color.White)
+        // 原版 searchBox 默认 gone，点顶部搜索按钮才显示；输入框本身无边框、透明背景。
+        if (searchOpen) {
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = { vm.setQuery(it) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                placeholder = { Text("搜索应用", color = Color(0xE6FFFFFF), style = WallpaperTextShadowStyle) },
+                singleLine = true,
+                textStyle = WallpaperTextShadowStyle.copy(fontSize = 15.sp),
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = Color.White) },
+                trailingIcon = {
+                    IconButton(onClick = { onSearchToggle(); vm.setQuery("") }) {
+                        Icon(Icons.Filled.Close, "关闭搜索", tint = Color.White)
                     }
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFFBBD2FF),
-                unfocusedBorderColor = Color(0xAAFFFFFF),
-                focusedContainerColor = Color(0x33000000),
-                unfocusedContainerColor = Color(0x22000000),
-                cursorColor = Color.White,
-            ),
-        )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = Color(0x22000000),
+                    unfocusedContainerColor = Color(0x22000000),
+                    cursorColor = Color.White,
+                ),
+            )
+        }
         if (state.loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color.White)
@@ -319,7 +327,7 @@ private fun CategoryRail(
                 Modifier
                     .size(48.dp)
                     .background(
-                        if (selected == "all") Color(0xAA8FB4FF) else Color(0x33FFFFFF),
+                        if (selected == "all") Color(0x44FFFFFF) else Color.Transparent,
                         MaterialTheme.shapes.small,
                     ),
                 contentAlignment = Alignment.Center,
@@ -343,7 +351,7 @@ private fun CategoryRail(
                     Modifier
                         .size(48.dp)
                         .background(
-                            if (catSelected) Color(0xAA8FB4FF) else Color(0x1AFFFFFF),
+                            if (catSelected) Color(0x44FFFFFF) else Color.Transparent,
                             MaterialTheme.shapes.small,
                         ),
                     contentAlignment = Alignment.Center,
@@ -388,12 +396,12 @@ private fun AppGrid(
             stickyHeader {
                 Text(
                     vm.categoryLabel(catId),
-                    color = Color(0xFFDCE8FF),
+                    color = Color.White,
                     fontSize = 14.sp,
                     style = WallpaperTextShadowStyle,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0x44000000))
+                        .background(Color(0x22000000))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
