@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.pediycc.mydrawer.data.AppInfo
 import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
+import com.pediycc.mydrawer.data.DebugLog
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UsageStatsHelper
@@ -58,11 +59,9 @@ fun DrawerScreen(vm: DrawerViewModel) {
     }
 
     /**
-     * 长按菜单「卸载应用」（2.9.2 诊断版）：依次尝试 4 条路径，每条都记录结果，
-     * 最后把过程汇总到提示条——成功发出请求时会注明走的哪条路径；
-     * 全部失败则给出最后的异常类型与信息。这样在无法连电脑抓 logcat 的机器上
-     * （如一加13 / ColorOS 15，存在 OplusForbidUninstallAppManager 对部分内置应用
-     * 的禁卸保护，拦截时不抛异常、不弹窗），凭提示条文字即可定位问题环节。
+     * 长按菜单「卸载应用」：四条路径逐条尝试（2.9.4 起过程只写调试日志，不再弹提示条）。
+     * 成功发出请求 → 静默；全部失败 → 提示最后的异常。详细过程在
+     * 「设置 → 调试日志」里查看，便于定位系统侧静默拦截类问题（如 ColorOS 禁卸）。
      */
     fun uninstallApp(app: AppInfo) {
         val pkg = app.packageName
@@ -101,20 +100,19 @@ fun DrawerScreen(vm: DrawerViewModel) {
                 )
             },
         )
+        DebugLog.log(context, "请求卸载：${app.label}（$pkg）")
         var lastError: String? = null
         for (attempt in attempts) {
             val result = runCatching { attempt.run() }
             if (result.isSuccess) {
-                vm.notifyUser(
-                    "已通过【${attempt.label}】向系统发出「${app.label}」的卸载请求。" +
-                        "若没有出现系统卸载确认框，说明该应用被系统禁止卸载（ColorOS 对软件商店、" +
-                        "浏览器等内置应用有禁卸保护），可长按 →「属性」在系统详情页处理",
-                )
+                DebugLog.log(context, "卸载请求已发出（${attempt.label}）。若无系统确认页，可能是系统对该应用的禁卸保护")
                 return
             }
             val e = result.exceptionOrNull()!!
             lastError = e.javaClass.simpleName + (e.message?.let { "($it)" } ?: "")
+            DebugLog.log(context, "卸载路径【${attempt.label}】失败：$lastError")
         }
+        DebugLog.log(context, "所有卸载路径均失败")
         vm.notifyUser("卸载界面启动失败：$lastError；可长按该应用 →「属性」在系统详情页卸载")
     }
 

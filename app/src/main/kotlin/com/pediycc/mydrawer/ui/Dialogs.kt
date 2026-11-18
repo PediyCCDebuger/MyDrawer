@@ -5,6 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,6 +38,7 @@ import com.pediycc.mydrawer.data.AppInfo
 import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.CategoryDef
+import com.pediycc.mydrawer.data.DebugLog
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
@@ -636,6 +641,68 @@ fun TextInputDialog(
             TextButton(onClick = { if (text.isNotBlank()) onConfirm(text) }) {
                 Text("确定", color = DrawerColors.Accent)
             }
+        }
+    }
+}
+
+/**
+ * 调试日志查看对话框（2.9.4）：滚动显示最近日志，可复制到剪贴板、
+ * 保存为文本文件、清空。参考 Reminder（AddinTimer 复刻版）的「诊断日志」交互。
+ */
+@Composable
+fun DebugLogDialog(
+    logText: String,
+    onNotify: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    val maxList = (LocalConfiguration.current.screenHeightDp * 0.7f).dp
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("调试日志", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "记录应用启动、载入、卸载、更新、备份等关键链路，用于问题定位。开关关闭期间不记录。",
+            color = DrawerColors.DialogSecondary,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        Surface(
+            color = Color(0xFF14161A),
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                logText,
+                color = Color(0xFFCFD8DC),
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                modifier = Modifier
+                    .heightIn(max = maxList)
+                    .verticalScroll(rememberScrollState())
+                    .padding(10.dp),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = {
+                onClear()
+                onNotify("调试日志已清空")
+            }) { Text("清空", color = DrawerColors.DialogText) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = {
+                val path = DebugLog.saveToFile(ctx)
+                if (path != null) onNotify("已保存：$path")
+                else onNotify("保存失败：无法写入文件")
+            }) { Text("保存", color = DrawerColors.Accent) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = {
+                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("MyDrawer 调试日志", logText))
+                onNotify("调试日志已复制到剪贴板")
+            }) { Text("复制", color = DrawerColors.Accent) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onDismiss) { Text("关闭", color = DrawerColors.Accent) }
         }
     }
 }

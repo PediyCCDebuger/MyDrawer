@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.BuildConfig
 import com.pediycc.mydrawer.data.Categories
+import com.pediycc.mydrawer.data.DebugLog
 import com.pediycc.mydrawer.data.NestedChildMode
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
@@ -74,6 +75,8 @@ fun SettingsScreen(
     var unlockHiddenDialog by remember { mutableStateOf(false) }
     var iconManageDialog by remember { mutableStateOf(false) }
     var unlistedDialog by remember { mutableStateOf(false) }
+    var debugEnabled by remember { mutableStateOf(DebugLog.isDebug(context)) }
+    var debugLogDialog by remember { mutableStateOf(false) }
     val usageGranted = UsageStatsHelper.hasPermission(context)
 
     Scaffold(
@@ -381,6 +384,32 @@ fun SettingsScreen(
                     onSelect = { vm.updatePrefs { p -> p.copy(updateProxy = it) } },
                 )
             }
+            item { SectionTitle("调试") }
+            item {
+                // 2.9.4：调试开关独立于 UserPrefs 存 SharedPreferences（不随备份导入导出），
+                // 与 Reminder（AddinTimer 复刻版）的「调试」开关同模式。
+                SwitchRow(
+                    title = "调试日志",
+                    subtitle = "开启后记录启动、载入、卸载、更新、备份等关键链路，用于问题定位；不会上传，只保存在本机",
+                    icon = Icons.Filled.BugReport,
+                    checked = debugEnabled,
+                    onCheckedChange = { on ->
+                        DebugLog.setDebug(context, on)
+                        debugEnabled = on
+                        if (on) DebugLog.log(context, "调试日志已开启（versionCode ${BuildConfig.VERSION_CODE}）")
+                    },
+                )
+            }
+            if (debugEnabled) {
+                item {
+                    SettingsRow(
+                        title = "查看调试日志",
+                        subtitle = "最近 300 条记录，可复制 / 保存为文本文件 / 清空",
+                        icon = Icons.Filled.ReceiptLong,
+                        onClick = { debugLogDialog = true },
+                    )
+                }
+            }
             item {
                 Text(
                     "MyDrawer ${BuildConfig.VERSION_NAME} · 独立重写，无广告、无统计、无内购。",
@@ -474,6 +503,14 @@ fun SettingsScreen(
                 vm.updatePrefs { it.copy(frequentLimit = v) }
                 frequentLimitDialog = false
             },
+        )
+    }
+    if (debugLogDialog) {
+        DebugLogDialog(
+            logText = DebugLog.text(context),
+            onNotify = { msg -> vm.notifyUser(msg) },
+            onClear = { DebugLog.clear(context) },
+            onDismiss = { debugLogDialog = false },
         )
     }
     if (unlockHiddenDialog) {

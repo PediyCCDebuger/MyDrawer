@@ -17,6 +17,7 @@ import com.pediycc.mydrawer.data.BackupManager
 import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.CategoryCatalog
+import com.pediycc.mydrawer.data.DebugLog
 import com.pediycc.mydrawer.data.Pinyin
 import com.pediycc.mydrawer.data.Preferences
 import com.pediycc.mydrawer.data.SearchMatcher
@@ -84,6 +85,11 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             val loaded = repo.loadApps()
             val apps = loaded.apps
             val usage = UsageStatsHelper.load(context)
+            DebugLog.log(
+                context,
+                "载入应用：当前列出 ${apps.size}，本机安装 ${loaded.totalInstalled}，无桌面入口未列出 ${loaded.unlisted.size}，" +
+                    "使用统计 ${usage.size} 条${if (usage.isEmpty()) "（未授权）" else ""}",
+            )
             // 分类可能被删除/改名，返回栈里失效的入口要剔掉，否则返回键会退到空白视图。
             val validIds = Categories.orderedFor(prefs.current).map { it.id }.toSet() + "all"
             _ui.value = _ui.value.copy(
@@ -750,8 +756,13 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             val text = backup.export(prefs.current)
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
-            }.onSuccess { notify("配置备份已导出") }
-                .onFailure { notify("导出失败：${it.message}") }
+            }.onSuccess {
+                DebugLog.log(context, "配置备份导出成功：${text.length} 字节")
+                notify("配置备份已导出")
+            }.onFailure {
+                DebugLog.log(context, "配置备份导出失败：${it.message}")
+                notify("导出失败：${it.message}")
+            }
         }
     }
 
@@ -764,17 +775,26 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             }
             runCatching { backup.import(raw) }
                 .onSuccess { imported ->
+                    DebugLog.log(context, "配置备份导入成功，重载应用列表")
                     prefs.replaceAll(imported)
                     refresh()
                     notify("配置备份已导入")
                 }
-                .onFailure { notify("导入失败：${it.message}") }
+                .onFailure {
+                    DebugLog.log(context, "配置备份导入失败：${it.message}")
+                    notify("导入失败：${it.message}")
+                }
         }
     }
 
     fun checkUpdate(onResult: (Updater.ReleaseInfo?, String?) -> Unit) {
         viewModelScope.launch {
             val info = Updater.fetchLatest(prefs.current.updateProxy)
+            DebugLog.log(
+                context,
+                if (info == null) "检查更新失败（代理=${prefs.current.updateProxy}）"
+                else "检查更新成功：远端 ${info.tag}",
+            )
             onResult(info, if (info == null) "检查更新失败，可更换代理后重试" else null)
         }
     }
@@ -789,14 +809,21 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             val ctx = getApplication<Application>()
             when (val result = Updater.download(ctx, info, prefs.current.updateProxy)) {
                 is Updater.DownloadResult.Fail -> {
+                    DebugLog.log(ctx, "更新下载失败：${result.reason}")
                     notify(result.reason)
                     onDone(result.reason, null)
                 }
                 is Updater.DownloadResult.Ok -> {
                     // 先下载已完成，这里才拉起系统安装器；不再检查 / 引导任何授权。
                     val msg = when (Updater.install(ctx, result.file)) {
-                        Updater.InstallResult.STARTED -> "下载完成，请在系统安装界面确认安装"
-                        Updater.InstallResult.FAILED -> "安装包已下载，但无法拉起安装器，可点「重新安装」重试"
+                        Updater.InstallResult.STARTED -> {
+                            DebugLog.log(ctx, "更新包下载完成（${result.file.length()} 字节），已拉起系统安装器")
+                            "下载完成，请在系统安装界面确认安装"
+                        }
+                        Updater.InstallResult.FAILED -> {
+                            DebugLog.log(ctx, "已下载安装包但拉起系统安装器失败：${result.file.name}")
+                            "安装包已下载，但无法拉起安装器，可点「重新安装」重试"
+                        }
                     }
                     notify(msg)
                     onDone(msg, result.file)
