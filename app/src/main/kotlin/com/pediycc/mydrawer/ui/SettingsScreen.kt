@@ -2,6 +2,7 @@ package com.pediycc.mydrawer.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -15,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.BuildConfig
@@ -99,24 +102,20 @@ fun SettingsScreen(
                 )
             }
             item {
-                StepperRow(
+                PercentRow(
                     title = "应用图标大小",
-                    subtitle = "调整抽屉里应用图标的显示大小",
+                    subtitle = "调整抽屉里应用图标的显示大小（80%–160%）",
                     value = prefs.iconSizePercent,
-                    range = 60..140,
-                    step = 10,
-                    suffix = "%",
+                    range = 80..160,
                     onValue = { v -> vm.updatePrefs { it.copy(iconSizePercent = v) } },
                 )
             }
             item {
-                StepperRow(
+                PercentRow(
                     title = "分类图标大小",
-                    subtitle = "调整左侧分类栏图标的显示大小",
+                    subtitle = "调整左侧分类栏图标的显示大小（80%–160%）",
                     value = prefs.categoryIconSizePercent,
                     range = 80..160,
-                    step = 10,
-                    suffix = "%",
                     onValue = { v -> vm.updatePrefs { it.copy(categoryIconSizePercent = v) } },
                 )
             }
@@ -421,16 +420,20 @@ private fun SwitchRow(
     HorizontalDivider(color = DrawerColors.SettingsDivider)
 }
 
+/**
+ * 百分比设置行：滑杆无极调整（steps = 0），旁边可输入精确数字。
+ * 输入框与滑杆共用同一个 value：输入时只接收范围内的整数，留空/超范围时不改值，
+ * 失焦时把文本复位到当前值，避免出现「显示 999 但实际 100%」的不一致。
+ */
 @Composable
-private fun StepperRow(
+private fun PercentRow(
     title: String,
     subtitle: String,
     value: Int,
     range: IntRange,
-    step: Int,
-    suffix: String,
     onValue: (Int) -> Unit,
 ) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
     Column(Modifier.fillMaxWidth().background(DrawerColors.SettingsRow).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.PhotoSizeSelectSmall, null, tint = Color(0xFF8FB4FF))
@@ -443,13 +446,34 @@ private fun StepperRow(
                     color = Color(0xFFBDBDBD),
                 )
             }
-            Text("$value$suffix", color = Color.White)
+            OutlinedTextField(
+                value = text,
+                onValueChange = { raw ->
+                    val digits = raw.filter { it.isDigit() }
+                    text = digits
+                    digits.toIntOrNull()?.let { n -> if (n in range) onValue(n.coerceIn(range)) }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                suffix = { Text("%", color = DrawerColors.DialogSecondary) },
+                modifier = Modifier.width(90.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = DrawerColors.Accent,
+                    unfocusedBorderColor = Color(0x88FFFFFF),
+                    focusedLabelColor = DrawerColors.Accent,
+                    unfocusedLabelColor = DrawerColors.DialogSecondary,
+                    cursorColor = Color.White,
+                ),
+            )
         }
         Slider(
-            value = value.toFloat(),
-            onValueChange = { onValue(((it / step).toInt() * step).coerceIn(range.first, range.last)) },
+            value = value.toFloat().coerceIn(range.first.toFloat(), range.last.toFloat()),
+            onValueChange = { onValue(it.toInt().coerceIn(range)) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
-            steps = (range.last - range.first) / step - 1,
+            steps = 0,
             colors = drawerSliderColors(),
         )
     }

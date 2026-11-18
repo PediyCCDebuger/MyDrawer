@@ -58,10 +58,10 @@ fun AppMenuSheet(
             )
             Spacer(Modifier.height(8.dp))
             Text("移动到分类", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
-            Categories.ALL.forEach { cat ->
+            Categories.orderedFor(prefs).filter { it.id != Categories.FREQUENT }.forEach { cat ->
                 MenuItem(
                     if (cat.id == app.categoryId) Icons.Filled.CheckCircle else Icons.Filled.ArrowForward,
-                    cat.label,
+                    prefs.categoryLabels[cat.id] ?: cat.label,
                     { onSetCategory(cat.id) },
                 )
             }
@@ -79,8 +79,11 @@ fun CategoryMenuSheet(
     onDismiss: () -> Unit,
     onRename: () -> Unit,
     onIcon: () -> Unit,
+    onNew: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
+    val deletable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF2A2D31)) {
         Column(Modifier.padding(16.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
             Text(
@@ -89,10 +92,14 @@ fun CategoryMenuSheet(
                 color = Color.White,
             )
             Spacer(Modifier.height(12.dp))
+            MenuItem(Icons.Filled.Add, "新建分类", onNew)
             MenuItem(Icons.Filled.Edit, "重命名分类", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(Icons.Filled.ArrowUpward, "分类上移", { vm.moveCategory(categoryId, -1) })
             MenuItem(Icons.Filled.ArrowDownward, "分类下移", { vm.moveCategory(categoryId, 1) })
+            if (deletable) {
+                MenuItem(Icons.Filled.Delete, "删除分类", onDelete)
+            }
             Spacer(Modifier.height(8.dp))
             Text("此分类内应用排序", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
             SortMode.LABELS.forEach { (mode, label) ->
@@ -223,7 +230,21 @@ fun IconPickerSheet(
                 contentColor = Color.White,
             ) {
                 titles.forEachIndexed { index, title ->
-                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title, color = Color.White) })
+                    Tab(
+                        selected = tab == index,
+                        onClick = { tab = index },
+                        // 之前「应用原图标」5 个字被折成两行，和另外两个标签对不齐；
+                        // 这里强制单行不换行并略缩小字号，三个标签高度一致。
+                        text = {
+                            Text(
+                                title,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                            )
+                        },
+                    )
                 }
             }
             when (tab) {

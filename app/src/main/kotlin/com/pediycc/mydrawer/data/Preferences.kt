@@ -44,6 +44,12 @@ data class UserPrefs(
     val launchCounts: Map<String, Int> = emptyMap(),
     // 更新代理：默认直连 GitHub；可选公共反向代理（不含本机代理）
     val updateProxy: String = Updater.PROXY_DIRECT,
+    // 2.4.1 新增：首次进入且未授予使用情况访问权限时提示一次
+    val usagePromptShown: Boolean = false,
+    /** 2.4.1 新增：用户自建分类的 id 列表（名称/图标复用 categoryLabels/categoryIcons）。 */
+    val customCategories: List<String> = emptyList(),
+    /** 2.4.1 新增：被删除的内置分类 id；这些入口不再显示，其下应用回落到「其他」。 */
+    val deletedCategories: Set<String> = emptySet(),
 )
 
 object SortMode {
@@ -164,6 +170,41 @@ class Preferences(context: Context) {
     fun recordLaunch(packageName: String) {
         update { p ->
             p.copy(launchCounts = p.launchCounts + (packageName to (p.launchCounts[packageName] ?: 0) + 1))
+        }
+    }
+
+    /** 首次进入时的使用频率授权提示只弹一次。 */
+    fun markUsagePromptShown() {
+        update { it.copy(usagePromptShown = true) }
+    }
+
+    /** 新建自定义分类，返回其 id；名称/图标复用 categoryLabels / categoryIcons。 */
+    fun addCategory(label: String): String {
+        val id = "custom_" + System.currentTimeMillis()
+        update { p ->
+            p.copy(
+                customCategories = p.customCategories + id,
+                categoryLabels = p.categoryLabels + (id to label),
+                categoryIcons = p.categoryIcons + (id to "builtin:apps"),
+                categoryOrder = p.categoryOrder + id,
+            )
+        }
+        return id
+    }
+
+    /** 删除分类：内置与自定义都可删；「其他」和「最常用」是兜底/特殊入口，保留。 */
+    fun deleteCategory(id: String) {
+        if (id == Categories.OTHER || id == Categories.FREQUENT) return
+        update { p ->
+            p.copy(
+                deletedCategories = p.deletedCategories + id,
+                customCategories = p.customCategories.filter { it != id },
+                categoryOrder = p.categoryOrder.filter { it != id },
+                categoryLabels = p.categoryLabels - id,
+                categoryIcons = p.categoryIcons - id,
+                categorySortModes = p.categorySortModes - id,
+                manualOrders = p.manualOrders - id,
+            )
         }
     }
 

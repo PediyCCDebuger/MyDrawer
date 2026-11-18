@@ -51,13 +51,24 @@ object Categories {
 
     fun isValid(id: String): Boolean = labelById.containsKey(id) || id == FREQUENT
 
-    /** 按用户顺序返回分类；缺省时「最常用」排最前，缺漏的分类补在后面。 */
-    fun ordered(order: List<String>, frequentEnabled: Boolean): List<CategoryDef> {
-        val remaining = ALL.toMutableList()
+    /**
+     * 按用户顺序返回分类；缺省时「最常用」排最前，缺漏的分类补在后面。
+     *
+     * 2.4.1：[custom] 是用户自建分类，[deleted] 中的内置/自建分类不再出现；
+     * 这两个参数有默认值，旧调用与旧备份的行为完全不变。
+     */
+    fun ordered(
+        order: List<String>,
+        frequentEnabled: Boolean,
+        custom: List<CategoryDef> = emptyList(),
+        deleted: Set<String> = emptySet(),
+    ): List<CategoryDef> {
+        val base = (ALL + custom).filterNot { it.id in deleted }
+        val remaining = base.toMutableList()
         val out = mutableListOf<CategoryDef>()
         val sequence: List<String> = when {
             order.isEmpty() ->
-                if (frequentEnabled) listOf(FREQUENT) + ALL.map { it.id } else ALL.map { it.id }
+                if (frequentEnabled) listOf(FREQUENT) + base.map { it.id } else base.map { it.id }
             // 用户调整过顺序：只有开启「最常用」时才保留它的位置，未记录则补到最前。
             frequentEnabled -> if (FREQUENT in order) order else listOf(FREQUENT) + order
             else -> order.filter { it != FREQUENT }
@@ -74,5 +85,17 @@ object Categories {
         }
         out += remaining
         return out
+    }
+
+    /** 结合用户设置解析出当前可见分类（含自建、去掉已删除）。 */
+    fun orderedFor(prefs: UserPrefs): List<CategoryDef> {
+        val custom = prefs.customCategories.map { id ->
+            CategoryDef(
+                id = id,
+                label = prefs.categoryLabels[id] ?: "新分类",
+                iconKey = prefs.categoryIcons[id] ?: "builtin:apps",
+            )
+        }
+        return ordered(prefs.categoryOrder, prefs.frequentEnabled, custom, prefs.deletedCategories)
     }
 }

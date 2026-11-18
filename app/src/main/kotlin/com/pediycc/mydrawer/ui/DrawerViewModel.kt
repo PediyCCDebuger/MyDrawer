@@ -72,15 +72,17 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 关闭「全部」/「最常用」后，停在已隐藏入口上的选中项要回落到第一个可用分类。 */
+    /** 关闭「全部」/「最常用」或删除分类后，停在已隐藏入口上的选中项要回落到第一个可用分类。 */
     private fun fallbackCategory(current: String, p: UserPrefs): String {
         if (current == "all") return if (p.allEnabled) "all" else firstCategory(p)
         if (current == Categories.FREQUENT && !p.frequentEnabled) return firstCategory(p)
+        // 分类被删除（内置或自建）后不再存在于可用列表，回落到第一个分类。
+        if (current !in Categories.orderedFor(p).map { it.id }) return firstCategory(p)
         return current
     }
 
     fun firstCategory(p: UserPrefs = prefs.current): String =
-        Categories.ordered(p.categoryOrder, p.frequentEnabled).firstOrNull()?.id ?: "all"
+        Categories.orderedFor(p).firstOrNull()?.id ?: "all"
 
     fun selectCategory(id: String) {
         _ui.value = _ui.value.copy(selectedCategory = id, selectMode = false, selected = emptySet())
@@ -196,7 +198,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun moveCategory(categoryId: String, delta: Int) {
-        val ids = Categories.ordered(prefs.current.categoryOrder, prefs.current.frequentEnabled)
+        val ids = Categories.orderedFor(prefs.current)
             .map { it.id }.toMutableList()
         val from = ids.indexOf(categoryId)
         if (from < 0) return
@@ -204,6 +206,35 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         if (to == from) return
         java.util.Collections.swap(ids, from, to)
         prefs.update { it.copy(categoryOrder = ids) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    /** 新建分类；若当前停在已删除分类上，创建后自动切到新分类。 */
+    fun createCategory(label: String): String {
+        val id = prefs.addCategory(label.trim())
+        _ui.value = _ui.value.copy(prefs = prefs.current, selectedCategory = id)
+        notify("分类「${label.trim()}」已创建")
+        return id
+    }
+
+    /**
+     * 删除分类。内置分类也允许删除，但「其他」「最常用」保留；
+     * 若正停在该分类，回落到第一个可用分类。原分类应用由 AppRepository 在下次刷新时归入「其他」。
+     */
+    fun deleteCategory(categoryId: String) {
+        if (categoryId == Categories.OTHER || categoryId == Categories.FREQUENT) return
+        prefs.deleteCategory(categoryId)
+        _ui.value = _ui.value.copy(
+            prefs = prefs.current,
+            selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
+        )
+        refresh()
+        notify("分类已删除，其中的应用已移入「其他」")
+    }
+
+    /** 首次进入时的使用频率授权提示，标记后不再重复。 */
+    fun markUsagePromptShown() {
+        prefs.markUsagePromptShown()
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
@@ -233,7 +264,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.overrideCategories(ids, categoryId)
         _ui.value = _ui.value.copy(selectMode = false, selected = emptySet())
         refresh()
-        notify("已将 ${ids.size} 个应用移动到${Categories.labelOf(categoryId)}")
+        notify("已将 ${ids.size} 个应用移动到${categoryLabel(categoryId)}")
     }
 
     // ---- 设置 ----
@@ -320,43 +351,20 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     fun downloadAndInstall(info: Updater.ReleaseInfo, onDone: (String) -> Unit = {}) {
         viewModelScope.launch {
             val ctx = getApplication<Application>()
-            // 先确认有「安装未知应用」授权，避免下载几十兆后才发现装不上。
-            if (!Updater.canInstall(ctx)) {
-                Updater.openInstallPermission(ctx)
-                val msg = "请先允许「安装未知应用」，返回后再点一次下载并安装"
-                notify(msg)
-                onDone(msg)
-                return@launch
-            }
             when (val result = Updater.download(ctx, info, prefs.current.updateProxy)) {
                 is Updater.DownloadResult.Fail -> {
                     notify(result.reason)
                     onDone(result.reason)
                 }
                 is Updater.DownloadResult.Ok -> {
-                    // 下载完成再拉起系统安装器；缺「安装未知应用」授权时先跳设置页。
-                    when (Updater.install(ctx, result.file)) {
-                        Updater.InstallResult.STARTED -> {
-                            val msg = "下载完成，请在系统安装界面确认安装"
-                            notify(msg)
-                            onDone(msg)
-                        }
-                        Updater.InstallResult.NEED_PERMISSION -> {
-                            val ok = Updater.openInstallPermission(ctx)
-                            val msg = if (ok) {
-                                "请先允许「安装未知应用」，返回后再点一次下载并安装"
-                            } else {
-                                "缺少安装权限，请在系统设置中允许本应用安装应用"
-                            }
-                            notify(msg)
-                            onDone(msg)
-                        }
-                        Updater.InstallResult.FAILED -> {
-                            val msg = "无法拉起安装程序，请更换代理重新下载"
-                            notify(msg)
-                            onDone(msg)
-                        }
+                    // 直接拉起系统安装器，不再检查 / 引导「安装未知应用」授权：
+                    // 实测该开关并非必需，系统安装界面返回后仍能正常安装。
+                    val msg = when (Updater.install(ctx, result.file)) {
+                        Updater.InstallResult.STARTED -> "下载完成，请在系统安装界面确认安装"
+                        Updater.InstallResult.FAILED -> "无法拉起安装程序，请更换代理重新下载"
                     }
+                    notify(msg)
+                    onDone(msg)
                 }
             }
         }

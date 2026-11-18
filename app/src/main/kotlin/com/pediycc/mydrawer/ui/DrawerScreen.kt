@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +29,7 @@ import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
+import com.pediycc.mydrawer.data.UsageStatsHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +63,15 @@ fun DrawerScreen(vm: DrawerViewModel) {
     var renameCategoryTarget by remember { mutableStateOf<String?>(null) }
     var iconTarget by remember { mutableStateOf<IconTarget?>(null) }
     var showUpdate by remember { mutableStateOf(false) }
+    var newCategoryDialog by remember { mutableStateOf(false) }
+    var showUsagePrompt by remember { mutableStateOf(false) }
+
+    // 第一次进入且未授予「使用情况访问权限」时提示一次；用户选「暂不」后不再打扰。
+    LaunchedEffect(Unit) {
+        if (!state.prefs.usagePromptShown && !UsageStatsHelper.hasPermission(context)) {
+            showUsagePrompt = true
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -142,7 +153,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
                 val categories = remember(state.prefs) {
-                    Categories.ordered(state.prefs.categoryOrder, state.prefs.frequentEnabled)
+                    Categories.orderedFor(state.prefs)
                 }
                 val rail: @Composable () -> Unit = {
                     CategoryRail(
@@ -152,6 +163,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
                         vm = vm,
                         onSelect = { vm.selectCategory(it) },
                         onLongClick = { menuCategory = it },
+                        onNew = { newCategoryDialog = true },
                     )
                 }
                 if (state.prefs.leftHanded) {
@@ -227,12 +239,51 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onDismiss = { menuCategory = null },
             onRename = { renameCategoryTarget = id; menuCategory = null },
             onIcon = { iconTarget = IconTarget.Category(id); menuCategory = null },
+            onNew = { newCategoryDialog = true; menuCategory = null },
+            onDelete = { vm.deleteCategory(id); menuCategory = null },
         )
+    }
+
+    if (newCategoryDialog) {
+        TextInputDialog(
+            title = "新建分类",
+            initial = "",
+            onDismiss = { newCategoryDialog = false },
+            onConfirm = { vm.createCategory(it); newCategoryDialog = false },
+        )
+    }
+
+    if (showUsagePrompt) {
+        ThemedDialog(onDismissRequest = {
+            vm.markUsagePromptShown()
+            showUsagePrompt = false
+        }) {
+            Text("开启使用频率权限", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "「最常用」分类需要读取本机应用使用情况，才能按真实使用频率排列。当前尚未获得该权限，授权后可获得更准确的常用应用；不授权也能正常使用抽屉。",
+                color = DrawerColors.DialogText,
+                fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = {
+                    vm.markUsagePromptShown()
+                    showUsagePrompt = false
+                }) { Text("暂不", color = DrawerColors.DialogText) }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = {
+                    vm.markUsagePromptShown()
+                    UsageStatsHelper.openPermissionSettings(context)
+                    showUsagePrompt = false
+                }) { Text("去授权", color = DrawerColors.Accent) }
+            }
+        }
     }
 
     if (moveCategoryOpen) {
         MoveDialog(
-            categories = Categories.ordered(state.prefs.categoryOrder, state.prefs.frequentEnabled),
+            categories = Categories.orderedFor(state.prefs),
             labelOf = { vm.categoryLabel(it) },
             onDismiss = { moveCategoryOpen = false },
             onPick = { vm.moveSelectedTo(it); moveCategoryOpen = false },
@@ -268,7 +319,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
 
     // 弹窗/底部菜单自己处理返回键，这里不要抢；只有设置页和多选需要自己收尾。
     val overlayOpen = menuApp != null || menuCategory != null || moveCategoryOpen ||
-        renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate
+        renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate ||
+        newCategoryDialog || showUsagePrompt
     // 设置页 / 多选都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
     // 放在最后注册，保证优先于主界面的默认返回行为。
     BackHandler(enabled = !overlayOpen && (showSettings || state.selectMode)) {
@@ -345,6 +397,7 @@ private fun CategoryRail(
     vm: DrawerViewModel,
     onSelect: (String) -> Unit,
     onLongClick: (String) -> Unit,
+    onNew: () -> Unit,
 ) {
     // 分类图标尺寸独立可调，默认比应用图标大一档。
     val iconSize = (30 * prefs.categoryIconSizePercent / 100f).coerceIn(20f, 54f).dp
@@ -434,6 +487,37 @@ private fun CategoryRail(
             }
             Spacer(Modifier.height(4.dp))
         }
+        // 新建分类入口：常驻分类栏底部，长按任一分类也有「新建分类 / 删除分类」。
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onNew, onLongClick = onNew),
+        ) {
+            Box(
+                Modifier
+                    .size(tileSize)
+                    .background(Color.Transparent, MaterialTheme.shapes.small),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Add,
+                    "新建分类",
+                    tint = DrawerColors.AllIcon,
+                    modifier = Modifier.size(iconSize),
+                )
+            }
+            if (prefs.showCategoryLabels) {
+                Text(
+                    "新建",
+                    color = Color(0xFFE0E0E0),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    style = WallpaperTextShadowStyle,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
     }
 }
 

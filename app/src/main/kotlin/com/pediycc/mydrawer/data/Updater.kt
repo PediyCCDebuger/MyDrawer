@@ -3,8 +3,6 @@ package com.pediycc.mydrawer.data
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.Dispatchers
@@ -41,9 +39,6 @@ object Updater {
     enum class InstallResult {
         /** 系统安装界面已成功拉起。 */
         STARTED,
-
-        /** 缺少「安装未知应用」授权，需要先跳到系统设置。 */
-        NEED_PERMISSION,
 
         /** 文件无效 / 无法拉起安装器。 */
         FAILED,
@@ -215,23 +210,12 @@ object Updater {
         return null
     }
 
-    fun canInstall(context: Context): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.packageManager.canRequestPackageInstalls()
-        } else true
-
-    /** 跳到「安装未知应用」授权页；返回是否成功拉起。 */
-    fun openInstallPermission(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
-        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        return runCatching { context.startActivity(intent) }.isSuccess
-    }
-
+    /**
+     * 直接拉起系统安装器，不预先检查 / 引导「安装未知应用」授权。
+     * 实测 AddinTimer 复刻版无需该开关：系统安装界面弹出即使用户返回也能正常完成安装，
+     * 因此 MyDrawer 同样把决定权交回系统安装器，不再拦截。
+     */
     fun install(context: Context, file: File): InstallResult {
-        if (!canInstall(context)) return InstallResult.NEED_PERMISSION
         return try {
             val uri: Uri = FileProvider.getUriForFile(
                 context,

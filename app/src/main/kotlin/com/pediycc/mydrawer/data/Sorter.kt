@@ -49,7 +49,7 @@ object Sorter {
     ): List<Pair<String, List<AppInfo>>> {
         // 有系统统计就以系统为准；没授权/没数据才用 MyDrawer 自己的启动次数。
         val counts = if (usageCounts.isNotEmpty()) usageCounts else prefs.launchCounts
-        val categories = Categories.ordered(prefs.categoryOrder, prefs.frequentEnabled)
+        val categories = Categories.orderedFor(prefs)
         return categories.mapNotNull { cat ->
             val inCat: List<AppInfo> = if (cat.id == Categories.FREQUENT) {
                 apps

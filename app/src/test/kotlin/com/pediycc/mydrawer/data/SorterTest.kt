@@ -102,6 +102,9 @@ class SorterTest {
         assertEquals(130, parsed.prefs.categoryIconSizePercent)
         assertEquals(true, parsed.prefs.normalizeIcons)
         assertEquals(Updater.PROXY_DIRECT, parsed.prefs.updateProxy)
+        assertEquals(false, parsed.prefs.usagePromptShown)
+        assertEquals(emptyList<String>(), parsed.prefs.customCategories)
+        assertEquals(emptySet<String>(), parsed.prefs.deletedCategories)
     }
 
     @Test
@@ -126,5 +129,35 @@ class SorterTest {
             false,
             Categories.ordered(emptyList(), false).any { it.id == Categories.FREQUENT },
         )
+    }
+
+    @Test
+    fun `custom categories appear and deleted ones disappear from ordered list`() {
+        val p = UserPrefs(
+            customCategories = listOf("custom_a"),
+            categoryLabels = mapOf("custom_a" to "我的分类"),
+            deletedCategories = setOf("games"),
+        )
+        val ids = Categories.orderedFor(p).map { it.id }
+        assert(ids.contains("custom_a"))
+        assert(!ids.contains("games"))
+        assertEquals("我的分类", Categories.orderedFor(p).first { it.id == "custom_a" }.label)
+    }
+
+    @Test
+    fun `groupEx includes custom category groups`() {
+        val apps = listOf(app("c1", "自定义应用", "custom_a"))
+        val prefs = UserPrefs(
+            customCategories = listOf("custom_a"),
+            deletedCategories = setOf("games"),
+        )
+        val groups = Sorter.groupEx(apps, prefs)
+        assertEquals(listOf("custom_a"), groups.map { it.first })
+    }
+
+    @Test
+    fun `version patch digit is compared numerically`() {
+        assertEquals(true, Updater.isNewer("v2.4.1", "2.4.0"))
+        assertEquals(false, Updater.isNewer("2.4.1", "2.4.1"))
     }
 }
