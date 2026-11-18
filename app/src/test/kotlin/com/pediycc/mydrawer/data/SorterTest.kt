@@ -78,6 +78,23 @@ class SorterTest {
     }
 
     @Test
+    fun `frequent group stays capped at ten even with explicit category sort`() {
+        val apps = (1..15).map { app("p$it", "应用$it", "games") }
+        val prefs = UserPrefs(
+            frequentEnabled = true,
+            launchCounts = apps.associate { it.packageName to it.packageName.removePrefix("p").toInt() },
+            // 给「最常用」单独设过排序方式：旧实现会跳过截断，把全部有使用记录的应用列出来。
+            categorySortModes = mapOf(Categories.FREQUENT to SortMode.BY_NAME),
+        )
+        val group = Sorter.groupsWithNested(Categories.FREQUENT, apps, prefs).single()
+        assertEquals(Sorter.FREQUENT_LIMIT, group.apps.size)
+        // 仍应保留频次最高的那批（按名称序展示，但成员只来自前 10 高频）。
+        val topTen = apps.sortedByDescending { prefs.launchCounts[it.packageName] ?: 0 }
+            .take(10).map { it.packageName }.toSet()
+        assertEquals(topTen, group.apps.map { it.packageName }.toSet())
+    }
+
+    @Test
     fun `usage stats take precedence over in-app launch counts`() {
         val apps = listOf(app("a", "A", "games"), app("b", "B", "tools"))
         val prefs = UserPrefs(

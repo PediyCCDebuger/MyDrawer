@@ -97,12 +97,6 @@ fun DrawerScreen(vm: DrawerViewModel) {
 
     // 2.3.0：固定纯黑不透明背景，不再透壁纸（透壁纸会导致滚动时整片重影）。
     Box(Modifier.fillMaxSize().background(DrawerColors.AppBackground)) {
-        // 顶栏标题后的数字：当前分类里实际显示的应用数量（跟随隐藏 / 搜索 / 分类切换变化）。
-        val visibleCount = remember(
-            state.apps, state.query, state.selectedCategory, state.prefs, state.usageCounts
-        ) {
-            vm.visibleGroups().sumOf { it.apps.size }
-        }
         Scaffold(
             containerColor = DrawerColors.AppBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -110,12 +104,15 @@ fun DrawerScreen(vm: DrawerViewModel) {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                     title = {
-                        Text(
-                            if (state.selectMode) "已选择 ${state.selected.size} 项"
-                            else "${vm.categoryLabel(state.selectedCategory)}（$visibleCount）",
-                            color = Color.White,
-                            style = WallpaperTextShadowStyle,
-                        )
+                        // 2.7.2：分类名与数量跟随右侧应用列表上方的分组标题显示，
+                        // 顶栏不再重复一遍；只有多选时才在这里显示选中数量。
+                        if (state.selectMode) {
+                            Text(
+                                "已选择 ${state.selected.size} 项",
+                                color = Color.White,
+                                style = WallpaperTextShadowStyle,
+                            )
+                        }
                     },
                     navigationIcon = {
                         if (state.selectMode) {
@@ -255,6 +252,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onClearCategory = { vm.clearCategory(app.packageName); menuApp = null },
             onRename = { renameAppTarget = app; menuApp = null },
             onIcon = { iconTarget = IconTarget.App(app.packageName); menuApp = null },
+            onMultiSelect = { vm.startSelectFor(app.packageName); menuApp = null },
         )
     }
 
@@ -272,6 +270,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onReorderApps = { appReorderTarget = id; menuCategory = null },
             onNest = { nestCategoryTarget = id; menuCategory = null },
             onReorderChildren = { childReorderTarget = id; menuCategory = null },
+            onMultiSelect = { vm.startSelectForCategory(id); menuCategory = null },
         )
     }
 
@@ -629,7 +628,8 @@ private fun AppGrid(
             } else {
                 stickyHeader(key = "header:${group.categoryId}") {
                     Text(
-                        vm.categoryLabel(group.categoryId),
+                        // 2.7.2：数量显示在应用列表上方的分类标题后面（每个分组各自的可见数量）。
+                        "${vm.categoryLabel(group.categoryId)}（${group.apps.size}）",
                         color = Color.White,
                         fontSize = 14.sp,
                         style = WallpaperTextShadowStyle,

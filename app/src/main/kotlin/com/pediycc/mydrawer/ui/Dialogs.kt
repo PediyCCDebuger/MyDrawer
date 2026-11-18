@@ -54,6 +54,7 @@ fun AppMenuSheet(
     onClearCategory: () -> Unit,
     onRename: () -> Unit,
     onIcon: () -> Unit,
+    onMultiSelect: () -> Unit,
 ) {
     // 限高并允许滚动，短屏/横屏也不溢出；列表超出一屏时正常滚动，点击始终有效。
     val maxList = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
@@ -63,6 +64,7 @@ fun AppMenuSheet(
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth().heightIn(max = maxList).verticalScroll(rememberScrollState())) {
             MenuItem(Icons.Filled.Launch, "启动应用", onLaunch)
+            MenuItem(Icons.Filled.Checklist, "多选", onMultiSelect)
             MenuItem(Icons.Filled.Info, "属性", onDetails)
             MenuItem(Icons.Filled.AddToHomeScreen, "发送到桌面", onPinToHome)
             MenuItem(Icons.Filled.Edit, "重命名", onRename)
@@ -106,6 +108,7 @@ fun CategoryMenuSheet(
     onReorderApps: () -> Unit,
     onNest: () -> Unit,
     onReorderChildren: () -> Unit,
+    onMultiSelect: () -> Unit,
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
     val deletable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
@@ -121,6 +124,7 @@ fun CategoryMenuSheet(
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth().heightIn(max = maxList).verticalScroll(rememberScrollState())) {
             MenuItem(Icons.Filled.Add, "新建分类", onNew)
+            MenuItem(Icons.Filled.Checklist, "多选本分类应用", onMultiSelect)
             MenuItem(Icons.Filled.Edit, "重命名分类", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(Icons.Filled.SwapVert, "拖动排序分类", onReorderSort)

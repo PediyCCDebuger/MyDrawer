@@ -506,6 +506,28 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = s.copy(selected = next)
     }
 
+    /** 应用长按菜单里的「多选」：直接进入多选模式，并预先勾选这个应用。 */
+    fun startSelectFor(packageName: String) {
+        _ui.value = _ui.value.copy(selectMode = true, selected = setOf(packageName))
+    }
+
+    /**
+     * 分类长按菜单里的「多选」：进入多选模式，并把该分类当前显示的应用全部勾选，
+     * 便于整类批量隐藏 / 移动 / 取消分类；之后再点其它应用可继续增减。
+     */
+    fun startSelectForCategory(categoryId: String) {
+        val ids = visibleGroups()
+            .filter { it.categoryId == categoryId }
+            .flatMap { it.apps }
+            .map { it.packageName }
+            .toSet()
+        if (ids.isEmpty()) {
+            notify("该分类里没有可选择的应​用")
+            return
+        }
+        _ui.value = _ui.value.copy(selectMode = true, selected = ids)
+    }
+
     fun selectAllVisible() {
         val ids = visibleGroups().flatMap { it.apps }.map { it.packageName }.toSet()
         _ui.value = _ui.value.copy(selected = ids)
@@ -681,9 +703,12 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         val s = _ui.value
         val visible = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
         val counts = if (s.usageCounts.isNotEmpty()) s.usageCounts else s.prefs.launchCounts
-        return if (categoryId == "all") visible.size else visible.count {
-            it.categoryId == categoryId ||
-                (categoryId == Categories.FREQUENT && (counts[it.packageName] ?: 0) > 0)
+        return when (categoryId) {
+            "all" -> visible.size
+            // 「最常用」只列前 10，计数不能跟着全量使用记录走。
+            Categories.FREQUENT -> visible.count { (counts[it.packageName] ?: 0) > 0 }
+                .coerceAtMost(Sorter.FREQUENT_LIMIT)
+            else -> visible.count { it.categoryId == categoryId }
         }
     }
 

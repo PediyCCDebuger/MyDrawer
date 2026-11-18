@@ -5,9 +5,20 @@ import java.util.Locale
 
 /** 应用排序：中文按拼音序，包名兜底保证稳定。 */
 object Sorter {
+    /** 「最常用」固定只列前 N 个高频应用（与原版一致），任何排序方式都不能突破。 */
+    const val FREQUENT_LIMIT = 10
+
     private val collator = Collator.getInstance(Locale.CHINA).apply {
         strength = Collator.SECONDARY
     }
+
+    /** 按使用频次降序取前 [FREQUENT_LIMIT] 个；同频按名称、包名保证稳定。 */
+    private fun topByUsage(list: List<AppInfo>, counts: Map<String, Int>): List<AppInfo> =
+        list.sortedWith(
+            compareByDescending<AppInfo> { counts[it.packageName] ?: 0 }
+                .then { a, b -> collator.compare(a.label, b.label) }
+                .thenBy { it.packageName },
+        ).take(FREQUENT_LIMIT)
 
     fun sort(
         apps: List<AppInfo>,
@@ -52,14 +63,7 @@ object Sorter {
         val categories = Categories.orderedFor(prefs)
         return categories.mapNotNull { cat ->
             val inCat: List<AppInfo> = if (cat.id == Categories.FREQUENT) {
-                apps
-                    .filter { (counts[it.packageName] ?: 0) > 0 }
-                    .sortedWith(
-                        compareByDescending<AppInfo> { counts[it.packageName] ?: 0 }
-                            .then { a, b -> collator.compare(a.label, b.label) }
-                            .thenBy { it.packageName },
-                    )
-                    .take(10)
+                topByUsage(apps.filter { (counts[it.packageName] ?: 0) > 0 }, counts)
             } else {
                 apps.filter { it.categoryId == cat.id }
             }
@@ -106,15 +110,13 @@ object Sorter {
         val counts = if (usageCounts.isNotEmpty()) usageCounts else prefs.launchCounts
 
         fun sortOf(catId: String, list: List<AppInfo>): List<AppInfo> {
-            val mode = prefs.categorySortModes[catId] ?: prefs.sortMode
-            if (catId == Categories.FREQUENT && prefs.categorySortModes[catId] == null) {
-                return list.sortedWith(
-                    compareByDescending<AppInfo> { counts[it.packageName] ?: 0 }
-                        .then { a, b -> collator.compare(a.label, b.label) }
-                        .thenBy { it.packageName },
-                ).take(10)
-            }
-            return sort(list, mode, counts, prefs.manualOrders[catId] ?: emptyList())
+            // 最常用先截到前 10，再决定展示顺序：即使给「最常用」单独选过排序方式，
+            // 也不能把全部有使用记录的应用列出来（旧实现漏了这一步，会列出上百个）。
+            val base = if (catId == Categories.FREQUENT) topByUsage(list, counts) else list
+            val explicit = prefs.categorySortModes[catId]
+            if (catId == Categories.FREQUENT && explicit == null) return base
+            val mode = explicit ?: prefs.sortMode
+            return sort(base, mode, counts, prefs.manualOrders[catId] ?: emptyList())
         }
 
         return when (categoryId) {
@@ -146,7 +148,7 @@ object Sorter {
         val inCat = if (categoryId == Categories.FREQUENT) {
             apps.filter { (prefs.launchCounts[it.packageName] ?: 0) > 0 }
                 .sortedByDescending { prefs.launchCounts[it.packageName] ?: 0 }
-                .take(10)
+                .take(FREQUENT_LIMIT)
         } else {
             apps.filter { it.categoryId == categoryId }
         }
