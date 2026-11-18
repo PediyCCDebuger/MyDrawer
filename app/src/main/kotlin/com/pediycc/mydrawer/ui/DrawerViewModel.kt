@@ -306,14 +306,25 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** 长按菜单「卸载应用」：拉起系统卸载确认界面。 */
+    /**
+     * 长按菜单「卸载应用」兜底路径（2.9.1）：依次尝试 ACTION_DELETE 与
+     * ACTION_UNINSTALL_PACKAGE（后者在部分 ROM 上解析更稳），全部失败时把
+     * 实际异常信息提示出来，方便继续定位，而不是静默吞掉。
+     */
     fun uninstall(packageName: String) {
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }.onFailure { notify("无法启动卸载界面") }
+        val uri = Uri.parse("package:$packageName")
+        @Suppress("DEPRECATION")
+        val candidates = listOf(
+            Intent(Intent.ACTION_DELETE, uri),
+            Intent(Intent.ACTION_UNINSTALL_PACKAGE, uri),
+        )
+        var lastError: String? = null
+        for (intent in candidates) {
+            runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .onSuccess { return }
+                .onFailure { lastError = it.message ?: it.javaClass.simpleName }
+        }
+        notify("无法启动卸载界面：$lastError")
     }
 
     fun renameApp(packageName: String, label: String) {

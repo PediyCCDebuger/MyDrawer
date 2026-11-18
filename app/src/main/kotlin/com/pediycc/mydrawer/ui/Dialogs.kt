@@ -3,6 +3,8 @@ package com.pediycc.mydrawer.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -633,6 +635,67 @@ fun TextInputDialog(
             Spacer(Modifier.width(8.dp))
             TextButton(onClick = { if (text.isNotBlank()) onConfirm(text) }) {
                 Text("确定", color = DrawerColors.Accent)
+            }
+        }
+    }
+}
+
+/**
+ * 「最常用数量」输入对话框（2.9.1）：点设置行弹出，输入数字 + 「确定」才写入生效；
+ * 对话框内直接提示允许的范围（上限 = 本机有使用记录的应用数）。
+ */
+@Composable
+fun FrequentLimitDialog(
+    value: Int,
+    maxAllowed: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    var text by remember { mutableStateOf(value.toString()) }
+    val parsed = text.toIntOrNull()
+    val valid = parsed != null && parsed in 1..maxAllowed
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("最常用数量", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "「最常用」分类显示的应用个数（默认 10）。最多可输入 $maxAllowed（本机有使用记录的应用数）。",
+            color = DrawerColors.DialogSecondary,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = text,
+            onValueChange = { raw -> text = raw.filter { it.isDigit() }.take(3) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = TextStyle(color = Color.White),
+            isError = !valid,
+            supportingText = {
+                Text(
+                    if (valid || text.isBlank()) "可输入 1 – $maxAllowed"
+                    else "请输入 1 – $maxAllowed 之间的数字",
+                    color = if (valid) DrawerColors.DialogSecondary else Color(0xFFFFB4AB),
+                    fontSize = 12.sp,
+                )
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = DrawerColors.Accent,
+                unfocusedBorderColor = Color(0x88FFFFFF),
+                cursorColor = Color.White,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(
+                enabled = valid,
+                onClick = { parsed?.let { if (it in 1..maxAllowed) onConfirm(it) } },
+            ) {
+                Text("确定", color = if (valid) DrawerColors.Accent else DrawerColors.DialogSecondary)
             }
         }
     }

@@ -70,6 +70,7 @@ fun SettingsScreen(
     var hiddenManage by remember { mutableStateOf(false) }
     var columnsDialog by remember { mutableStateOf<Boolean?>(null) } // true=竖屏 false=横屏
     var passwordDialog by remember { mutableStateOf(false) }
+    var frequentLimitDialog by remember { mutableStateOf(false) }
     var unlockHiddenDialog by remember { mutableStateOf(false) }
     var iconManageDialog by remember { mutableStateOf(false) }
     var unlistedDialog by remember { mutableStateOf(false) }
@@ -322,7 +323,7 @@ fun SettingsScreen(
                 FrequentLimitRow(
                     value = prefs.frequentLimit,
                     maxAllowed = maxAllowed,
-                    onValue = { v -> vm.updatePrefs { it.copy(frequentLimit = v) } },
+                    onClick = { frequentLimitDialog = true },
                 )
             }
             item {
@@ -460,6 +461,19 @@ fun SettingsScreen(
             vm = vm,
             hasPassword = prefs.hiddenAppsPasswordHash.isNotBlank(),
             onDismiss = { passwordDialog = false },
+        )
+    }
+    if (frequentLimitDialog) {
+        // 上限按本机有使用记录的应用数确定，与行内提示一致。
+        val counts = if (ui.usageCounts.isNotEmpty()) ui.usageCounts else prefs.launchCounts
+        FrequentLimitDialog(
+            value = prefs.frequentLimit,
+            maxAllowed = counts.size.coerceIn(1, 200),
+            onDismiss = { frequentLimitDialog = false },
+            onConfirm = { v ->
+                vm.updatePrefs { it.copy(frequentLimit = v) }
+                frequentLimitDialog = false
+            },
         )
     }
     if (unlockHiddenDialog) {
@@ -602,58 +616,35 @@ private fun PercentRow(
 }
 
 /**
- * 「最常用」数量输入行（2.9.0）：手动输入显示的应用个数，
- * 旁边提示当前系统允许输入的最大值 = 本机有使用记录的应用数。
+ * 「最常用」数量行（2.9.1 改交互）：不再直接内联输入（之前无确认、看不出是否生效），
+ * 改为点击弹出输入对话框，「确定」后才写入；副标题实时显示当前值与允许的最大值。
  */
 @Composable
 private fun FrequentLimitRow(
     value: Int,
     maxAllowed: Int,
-    onValue: (Int) -> Unit,
+    onClick: () -> Unit,
 ) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    Column(Modifier.fillMaxWidth().background(DrawerColors.SettingsRow).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(DrawerColors.SettingsRow)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Star, null, tint = Color(0xFF8FB4FF))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("最常用数量", color = Color.White, style = WallpaperTextShadowStyle)
                 Text(
-                    "「最常用」分类显示的应用个数，默认 10",
+                    "「最常用」分类显示的应用个数，当前 $value，最多 $maxAllowed（本机有使用记录的应用数）；点击修改",
                     style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
                     color = Color(0xFFBDBDBD),
                 )
             }
-            OutlinedTextField(
-                value = text,
-                onValueChange = { raw ->
-                    val digits = raw.filter { it.isDigit() }
-                    text = digits
-                    digits.toIntOrNull()?.let { n ->
-                        if (n in 1..maxAllowed) onValue(n.coerceIn(1, maxAllowed))
-                    }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                modifier = Modifier.width(90.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = DrawerColors.Accent,
-                    unfocusedBorderColor = Color(0x88FFFFFF),
-                    focusedLabelColor = DrawerColors.Accent,
-                    unfocusedLabelColor = DrawerColors.DialogSecondary,
-                    cursorColor = Color.White,
-                ),
-            )
+            Icon(Icons.Filled.Edit, null, tint = Color(0xFF9E9E9E))
         }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "最多可输入 $maxAllowed（本机有使用记录的应用数）",
-            style = WallpaperTextShadowStyle.copy(fontSize = 12.sp),
-            color = Color(0xFF9E9E9E),
-        )
     }
     HorizontalDivider(color = DrawerColors.SettingsDivider)
 }

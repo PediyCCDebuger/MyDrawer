@@ -57,6 +57,22 @@ fun DrawerScreen(vm: DrawerViewModel) {
         }
     }
 
+    /**
+     * 长按菜单「卸载应用」（2.9.1 修复无效）：改用 Activity 上下文直接拉起系统卸载确认界面。
+     * 之前走 ViewModel 的 Application 上下文 + NEW_TASK，部分 ROM（MIUI/HyperOS 等）会静默拦截
+     * 非界面上下文发起的卸载器，表现为点击后毫无反应；Activity 上下文是前台调用方，不受该限制。
+     * Activity 路径失败再回落到 VM 的多级兜底（带异常信息提示，便于继续排查）。
+     */
+    fun uninstallApp(packageName: String) {
+        val ok = runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_DELETE)
+                    .setData(android.net.Uri.parse("package:$packageName")),
+            )
+        }.isSuccess
+        if (!ok) vm.uninstall(packageName)
+    }
+
     var showSettings by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var menuApp by remember { mutableStateOf<AppInfo?>(null) }
@@ -278,7 +294,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onDismiss = { menuApp = null },
             onLaunch = { launchAndFinish(app.packageName); menuApp = null },
             onDetails = { openAppDetails(app.packageName); menuApp = null },
-            onUninstall = { vm.uninstall(app.packageName); menuApp = null },
+            onUninstall = { uninstallApp(app.packageName); menuApp = null },
             onPinToHome = { vm.pinToHome(app.packageName); menuApp = null },
             onToggleHidden = { vm.toggleHidden(app.packageName); menuApp = null },
             onToggleCategory = { catId -> vm.toggleAppCategory(app.packageName, catId) },
