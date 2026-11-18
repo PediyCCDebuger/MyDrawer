@@ -66,11 +66,13 @@ fun SettingsScreen(
     onImport: () -> Unit,
 ) {
     val context = LocalContext.current
+    val ui by vm.ui.collectAsState()
     var hiddenManage by remember { mutableStateOf(false) }
     var columnsDialog by remember { mutableStateOf<Boolean?>(null) } // true=竖屏 false=横屏
     var passwordDialog by remember { mutableStateOf(false) }
     var unlockHiddenDialog by remember { mutableStateOf(false) }
     var iconManageDialog by remember { mutableStateOf(false) }
+    var unlistedDialog by remember { mutableStateOf(false) }
     val usageGranted = UsageStatsHelper.hasPermission(context)
 
     Scaffold(
@@ -197,6 +199,34 @@ fun SettingsScreen(
                             onCheckedChange = { vm.setShowSystemApps(it) },
                             colors = drawerCheckboxColors(),
                         )
+                    },
+                )
+            }
+            item {
+                // 载入数量核对：本机安装总数 vs 抽屉实际载入数，差额点开可看到具体是哪几个。
+                val loadedCount = ui.apps.size
+                val totalCount = ui.totalInstalled
+                val unlisted = ui.unlistedApps
+                SettingsRow(
+                    title = "应用载入统计",
+                    subtitle = when {
+                        totalCount <= 0 -> "正在读取本机应用列表…"
+                        unlisted.isEmpty() -> "已载入 $loadedCount 个，本机安装 $totalCount 个（全部已载入）"
+                        else -> "已载入 $loadedCount 个 / 本机安装 $totalCount 个；" +
+                            "${unlisted.size} 个没有桌面入口未列出，点此查看"
+                    },
+                    icon = Icons.Filled.Apps,
+                    onClick = { if (unlisted.isNotEmpty()) unlistedDialog = true },
+                    trailing = if (unlisted.isNotEmpty()) {
+                        {
+                            Icon(
+                                Icons.Filled.ChevronRight,
+                                null,
+                                tint = DrawerColors.DialogSecondary,
+                            )
+                        }
+                    } else {
+                        null
                     },
                 )
             }
@@ -381,6 +411,36 @@ fun SettingsScreen(
                     vm.resetCustomIcons()
                     iconManageDialog = false
                 }) { Text("恢复默认图标", color = DrawerColors.Accent) }
+            }
+        }
+    }
+    if (unlistedDialog) {
+        ThemedDialog(onDismissRequest = { unlistedDialog = false }) {
+            Text("未列出的应用", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "下面这些应用没有桌面启动入口（系统跟踪、开关控制这类），与系统应用抽屉保持一致，默认不列入。" +
+                    "需要时打开「显示系统应用」即可显示。",
+                color = DrawerColors.DialogText,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(Modifier.fillMaxWidth().heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
+                ui.unlistedApps.forEach { app ->
+                    ListItem(
+                        headlineContent = { Text(app.label, color = Color.White) },
+                        supportingContent = {
+                            Text(app.packageName, color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { unlistedDialog = false }) {
+                    Text("关闭", color = DrawerColors.Accent)
+                }
             }
         }
     }

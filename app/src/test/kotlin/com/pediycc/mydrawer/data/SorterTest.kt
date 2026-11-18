@@ -78,6 +78,22 @@ class SorterTest {
     }
 
     @Test
+    fun `move targets put uncategorized last and drop frequent`() {
+        val prefs = UserPrefs(
+            frequentEnabled = true,
+            customCategories = listOf("custom_1"),
+            categoryLabels = mapOf("custom_1" to "新分类"),
+            // 用户把新建分类排到了「未分类」后面，移动到分类列表仍应把「未分类」固定在末尾。
+            categoryOrder = listOf(Categories.FREQUENT, "games", "custom_1", Categories.OTHER),
+        )
+        val targets = Categories.moveTargets(prefs)
+        assertEquals(Categories.OTHER, targets.last().id)
+        val customIndex = targets.indexOfFirst { it.id == "custom_1" }
+        assertEquals(true, customIndex in 0 until targets.lastIndex)
+        assertEquals(false, targets.any { it.id == Categories.FREQUENT })
+    }
+
+    @Test
     fun `frequent group stays capped at ten even with explicit category sort`() {
         val apps = (1..15).map { app("p$it", "应用$it", "games") }
         val prefs = UserPrefs(

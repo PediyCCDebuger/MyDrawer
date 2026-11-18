@@ -105,6 +105,15 @@ object Categories {
         return ordered(prefs.categoryOrder, prefs.frequentEnabled, custom, prefs.deletedCategories)
     }
 
+    /**
+     * 「移动到分类」可选的目标分类：「最常用」是虚拟入口不能做目标，
+     * 「未分类」固定排最后 —— 它是兜底项，新建的分类不应排在它后面。
+     */
+    fun moveTargets(prefs: UserPrefs): List<CategoryDef> =
+        orderedFor(prefs)
+            .filter { it.id != FREQUENT }
+            .sortedBy { if (it.id == OTHER) 1 else 0 }
+
     // ---- 2.7.0 分类嵌套 ----
 
     /** [id] 是否是 [ancestorId] 的后代（沿 parents 链向上找，用于阻止嵌套成环）。 */

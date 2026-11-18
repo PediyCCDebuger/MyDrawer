@@ -7,6 +7,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
@@ -109,7 +110,8 @@ fun ThemedDialog(
             color = DrawerColors.DialogContainer,
             contentColor = DrawerColors.DialogText,
             shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+            // 输入框获得焦点时让对话框整体避开软键盘，避免「确定 / 创建」按钮被键盘盖住。
+            modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding).imePadding(),
         ) {
             Column(Modifier.padding(20.dp), content = content)
         }

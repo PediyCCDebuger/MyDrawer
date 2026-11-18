@@ -69,6 +69,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
     var appReorderTarget by remember { mutableStateOf<String?>(null) }
     var nestCategoryTarget by remember { mutableStateOf<String?>(null) }
     var childReorderTarget by remember { mutableStateOf<String?>(null) }
+    var moveCategoriesOpen by remember { mutableStateOf(false) }
+    var confirmDeleteCategories by remember { mutableStateOf(false) }
 
     // 第一次进入且未授予「使用情况访问权限」时提示一次；用户选「暂不」后不再打扰。
     LaunchedEffect(Unit) {
@@ -106,23 +108,32 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     title = {
                         // 2.7.2：分类名与数量跟随右侧应用列表上方的分组标题显示，
                         // 顶栏不再重复一遍；只有多选时才在这里显示选中数量。
-                        if (state.selectMode) {
-                            Text(
+                        when {
+                            state.selectMode -> Text(
                                 "已选择 ${state.selected.size} 项",
+                                color = Color.White,
+                                style = WallpaperTextShadowStyle,
+                            )
+                            state.categorySelectMode -> Text(
+                                "已选择 ${state.selectedCategories.size} 个分类",
                                 color = Color.White,
                                 style = WallpaperTextShadowStyle,
                             )
                         }
                     },
                     navigationIcon = {
-                        if (state.selectMode) {
-                            IconButton(onClick = { vm.setSelectMode(false) }) {
+                        when {
+                            state.selectMode -> IconButton(onClick = { vm.setSelectMode(false) }) {
                                 Icon(Icons.Filled.Close, "退出多选", tint = Color.White)
                             }
-                        } else if (state.categoryTrail.isNotEmpty()) {
-                            // 从嵌套子分类返回上级分类，与返回键等价。
-                            IconButton(onClick = { vm.backToParentCategory() }) {
-                                Icon(Icons.Filled.ArrowBack, "返回上级分类", tint = Color.White)
+                            state.categorySelectMode -> IconButton(onClick = { vm.exitCategorySelect() }) {
+                                Icon(Icons.Filled.Close, "退出分类多选", tint = Color.White)
+                            }
+                            state.categoryTrail.isNotEmpty() -> {
+                                // 从嵌套子分类返回上级分类，与返回键等价。
+                                IconButton(onClick = { vm.backToParentCategory() }) {
+                                    Icon(Icons.Filled.ArrowBack, "返回上级分类", tint = Color.White)
+                                }
                             }
                         }
                     },
@@ -139,6 +150,14 @@ fun DrawerScreen(vm: DrawerViewModel) {
                             }
                             IconButton(onClick = { moveCategoryOpen = true }) {
                                 Icon(Icons.Filled.DriveFileMove, "移动到分类", tint = Color.White)
+                            }
+                        } else if (state.categorySelectMode) {
+                            // 分类多选：批量删除 / 批量移动（嵌套到某个分类或移回顶层）。
+                            IconButton(onClick = { confirmDeleteCategories = true }) {
+                                Icon(Icons.Filled.Delete, "删除选中分类", tint = Color.White)
+                            }
+                            IconButton(onClick = { moveCategoriesOpen = true }) {
+                                Icon(Icons.Filled.DriveFileMove, "移动选中分类", tint = Color.White)
                             }
                         } else {
                             IconButton(onClick = {
@@ -183,7 +202,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
                         selected = state.selectedCategory,
                         prefs = state.prefs,
                         vm = vm,
+                        selectMode = state.categorySelectMode,
+                        selectedCategories = state.selectedCategories,
+                        hintVisible = state.selectMode || state.categorySelectMode,
                         onSelect = { vm.selectCategory(it) },
+                        onToggle = { vm.toggleCategorySelected(it) },
                         onLongClick = { menuCategory = it },
                         onNew = { newCategoryDialog = true },
                     )
@@ -202,7 +225,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             }
         }
 
-        if (state.selectMode) {
+        if (state.selectMode || state.categorySelectMode) {
             // 外层让开系统导航栏，内层才是提示条本身；否则提示条会被导航栏盖住/裁掉。
             Box(
                 Modifier
@@ -215,7 +238,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Text(
-                        "点击应用选择 · 右上角箭头移动 / 减号取消分类 / 眼睛隐藏",
+                        if (state.categorySelectMode) {
+                            "点击分类选择 · 右上角移动 / 删除"
+                        } else {
+                            "点击应用选择 · 右上角移动 / 取消分类 / 隐藏"
+                        },
                         color = Color.White,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -270,7 +297,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onReorderApps = { appReorderTarget = id; menuCategory = null },
             onNest = { nestCategoryTarget = id; menuCategory = null },
             onReorderChildren = { childReorderTarget = id; menuCategory = null },
-            onMultiSelect = { vm.startSelectForCategory(id); menuCategory = null },
+            onMultiSelect = { vm.startCategorySelect(id); menuCategory = null },
         )
     }
 
@@ -310,11 +337,50 @@ fun DrawerScreen(vm: DrawerViewModel) {
     }
 
     if (newCategoryDialog) {
-        TextInputDialog(
-            title = "新建分类",
-            initial = "",
+        // 新建时直接选好内置图标，避免建完再单独改。
+        NewCategoryDialog(
             onDismiss = { newCategoryDialog = false },
-            onConfirm = { vm.createCategory(it); newCategoryDialog = false },
+            onConfirm = { label, iconKey ->
+                vm.createCategory(label, iconKey)
+                newCategoryDialog = false
+            },
+        )
+    }
+
+    if (confirmDeleteCategories) {
+        ThemedDialog(onDismissRequest = { confirmDeleteCategories = false }) {
+            Text("删除分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "将删除选中的 ${state.selectedCategories.size} 个分类（「未分类」「最常用」会保留），" +
+                    "其中的应用会移入「未分类」。此操作不可撤销，但可通过导入配置备份恢复。",
+                color = DrawerColors.DialogText,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { confirmDeleteCategories = false }) {
+                    Text("取消", color = DrawerColors.DialogText)
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = {
+                    vm.deleteSelectedCategories()
+                    confirmDeleteCategories = false
+                }) { Text("删除", color = Color(0xFFEF9A9A)) }
+            }
+        }
+    }
+
+    if (moveCategoriesOpen) {
+        MoveCategoriesDialog(
+            selectedIds = state.selectedCategories,
+            vm = vm,
+            prefs = state.prefs,
+            onDismiss = { moveCategoriesOpen = false },
+            onPick = { parentId ->
+                vm.moveSelectedCategories(parentId)
+                moveCategoriesOpen = false
+            },
         )
     }
 
@@ -348,7 +414,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
 
     if (moveCategoryOpen) {
         MoveDialog(
-            categories = Categories.orderedFor(state.prefs),
+            categories = Categories.moveTargets(state.prefs),
             labelOf = { vm.categoryLabel(it) },
             onDismiss = { moveCategoryOpen = false },
             onPick = { vm.moveSelectedTo(it); moveCategoryOpen = false },
@@ -386,15 +452,20 @@ fun DrawerScreen(vm: DrawerViewModel) {
     val overlayOpen = menuApp != null || menuCategory != null || moveCategoryOpen ||
         renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate ||
         newCategoryDialog || showUsagePrompt || categoryReorderOpen || appReorderTarget != null ||
-        nestCategoryTarget != null || childReorderTarget != null
+        nestCategoryTarget != null || childReorderTarget != null || moveCategoriesOpen ||
+        confirmDeleteCategories
     // 设置页 / 多选 / 嵌套子分类都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
     // 放在最后注册，保证优先于主界面的默认返回行为。
     BackHandler(
-        enabled = !overlayOpen && (showSettings || state.selectMode || state.categoryTrail.isNotEmpty())
+        enabled = !overlayOpen && (
+            showSettings || state.selectMode || state.categorySelectMode ||
+                state.categoryTrail.isNotEmpty()
+            )
     ) {
         when {
             showSettings -> showSettings = false
             state.selectMode -> vm.setSelectMode(false)
+            state.categorySelectMode -> vm.exitCategorySelect()
             // 在嵌套子分类里：退回上一级分类。
             else -> vm.backToParentCategory()
         }
@@ -468,7 +539,11 @@ private fun CategoryRail(
     selected: String,
     prefs: com.pediycc.mydrawer.data.UserPrefs,
     vm: DrawerViewModel,
+    selectMode: Boolean,
+    selectedCategories: Set<String>,
+    hintVisible: Boolean,
     onSelect: (String) -> Unit,
+    onToggle: (String) -> Unit,
     onLongClick: (String) -> Unit,
     onNew: () -> Unit,
 ) {
@@ -491,13 +566,14 @@ private fun CategoryRail(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(onClick = { onSelect("all") }, onLongClick = {}),
+                    // 分类多选时「全部」不是可选分类，点击不再切换视图。
+                    .combinedClickable(onClick = { if (!selectMode) onSelect("all") }, onLongClick = {}),
             ) {
                 Box(
                     Modifier
                         .size(tileSize)
                         .background(
-                            if (selected == "all") DrawerColors.RailSelected else Color.Transparent,
+                            if (!selectMode && selected == "all") DrawerColors.RailSelected else Color.Transparent,
                             MaterialTheme.shapes.small,
                         ),
                     contentAlignment = Alignment.Center,
@@ -512,7 +588,7 @@ private fun CategoryRail(
                 if (prefs.showCategoryLabels) {
                     Text(
                         "全部",
-                        color = if (selected == "all") Color.White else Color(0xFFE0E0E0),
+                        color = if (!selectMode && selected == "all") Color.White else Color(0xFFE0E0E0),
                         fontSize = 11.sp,
                         maxLines = 1,
                         style = WallpaperTextShadowStyle,
@@ -522,12 +598,16 @@ private fun CategoryRail(
             Spacer(Modifier.height(4.dp))
         }
         categories.forEach { cat ->
-            val catSelected = selected == cat.id
+            // 分类多选时用 selectedCategories 决定高亮，点击改为勾选 / 取消勾选。
+            val catSelected = if (selectMode) cat.id in selectedCategories else selected == cat.id
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(onClick = { onSelect(cat.id) }, onLongClick = { onLongClick(cat.id) }),
+                    .combinedClickable(
+                        onClick = { if (selectMode) onToggle(cat.id) else onSelect(cat.id) },
+                        onLongClick = { if (!selectMode) onLongClick(cat.id) },
+                    ),
             ) {
                 Box(
                     Modifier
@@ -546,6 +626,17 @@ private fun CategoryRail(
                         contentDescription = cat.label,
                         colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(cat.id)),
                     )
+                    if (selectMode) {
+                        // 右上角勾选角标，明确当前是否已选中。
+                        Icon(
+                            if (catSelected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                            if (catSelected) "已选中" else "未选中",
+                            tint = if (catSelected) DrawerColors.Accent else Color(0x88FFFFFF),
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(16.dp),
+                        )
+                    }
                 }
                 if (prefs.showCategoryLabels) {
                     Text(
@@ -561,11 +652,15 @@ private fun CategoryRail(
             Spacer(Modifier.height(4.dp))
         }
         // 新建分类入口：常驻分类栏底部，长按任一分类也有「新建分类 / 删除分类」。
+        // 分类多选进行中时不响应，避免误触打断批量操作。
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onNew, onLongClick = onNew),
+                .combinedClickable(
+                    onClick = { if (!selectMode) onNew() },
+                    onLongClick = { if (!selectMode) onNew() },
+                ),
         ) {
             Box(
                 Modifier
@@ -590,7 +685,8 @@ private fun CategoryRail(
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
+        // 多选提示条会横跨屏幕底部，分类栏底部同样留出空间，避免「新建」被压住点不到。
+        Spacer(Modifier.height(if (hintVisible) 108.dp else 6.dp))
     }
 }
 
@@ -609,9 +705,12 @@ private fun AppGrid(
     val landscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val configured = if (landscape) state.prefs.landscapeColumns else state.prefs.gridColumns
     val columns = if (configured > 0) configured else if (landscape) 6 else 4
+    // 多选时底部悬浮提示条会盖住列表最后一行，点击命中会被它吃掉；
+    // 这里给列表底部留出 108dp（提示条 + 导航栏余量），最后一行可以正常滚出来并点选。
+    val bottomPad = if (state.selectMode || state.categorySelectMode) 108.dp else 6.dp
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 6.dp),
+        contentPadding = PaddingValues(top = 6.dp, bottom = bottomPad),
     ) {
         groups.forEach { group ->
             if (group.isChildEntry) {
@@ -649,12 +748,19 @@ private fun AppGrid(
                                 state = state,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
-                                    if (state.selectMode) vm.toggleSelected(app.packageName)
-                                    else onLaunch(app.packageName)
+                                    when {
+                                        // 分类多选时应用区只作展示，避免误启动应用。
+                                        state.categorySelectMode -> Unit
+                                        state.selectMode -> vm.toggleSelected(app.packageName)
+                                        else -> onLaunch(app.packageName)
+                                    }
                                 },
                                 onLongClick = {
-                                    if (state.selectMode) vm.toggleSelected(app.packageName)
-                                    else onMenu(app)
+                                    when {
+                                        state.categorySelectMode -> Unit
+                                        state.selectMode -> vm.toggleSelected(app.packageName)
+                                        else -> onMenu(app)
+                                    }
                                 },
                             )
                         }

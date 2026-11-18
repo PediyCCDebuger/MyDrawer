@@ -15,7 +15,20 @@ class AppRepository(
 ) {
     private val pm: PackageManager = context.packageManager
 
-    suspend fun loadApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+    /** 因没有桌面入口、且未开启「显示系统应用」而未进入抽屉的应用。 */
+    data class UnlistedApp(val packageName: String, val label: String)
+
+    /**
+     * 载入结果：除了应用列表本身，还带上「本机安装包总数」和被过滤掉的应用，
+     * 供设置页核对数量差异（例如系统显示 192 个而抽屉列出 190 个时，能看清少的是哪两个）。
+     */
+    data class LoadResult(
+        val apps: List<AppInfo>,
+        val totalInstalled: Int,
+        val unlisted: List<UnlistedApp>,
+    )
+
+    suspend fun loadApps(): LoadResult = withContext(Dispatchers.IO) {
         val packages = pm.getInstalledPackages(0)
         // 系统抽屉里真正能看到的程序 = 声明了 MAIN + LAUNCHER 且处于启用状态的活动。
         // 注意不能用 getLaunchIntentForPackage：它会先匹配 CATEGORY_INFO，
@@ -28,17 +41,22 @@ class AppRepository(
             ).mapNotNull { it.activityInfo?.packageName }.toSet()
         }.getOrDefault(emptySet())
         val result = mutableListOf<AppInfo>()
+        val unlisted = mutableListOf<UnlistedApp>()
         for (pkg in packages) {
             val appInfo: ApplicationInfo = pkg.applicationInfo ?: continue
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-            // 与系统抽屉一致：有桌面入口的（浏览器 / 应用商店 / 相机等）始终列出；
-            // 没有入口的（系统跟踪、开关控制等纯系统进程）默认隐藏，由「显示系统应用」开关控制。
-            val hasLauncher = pkg.packageName in launcherPackages
-            if (!hasLauncher && !prefs.current.showSystemApps) continue
-
             val label = prefs.current.appLabels[pkg.packageName]
                 ?: runCatching { appInfo.loadLabel(pm).toString() }
                     .getOrDefault(pkg.packageName)
+            // 与系统抽屉一致：有桌面入口的（浏览器 / 应用商店 / 相机等）始终列出；
+            // 没有入口的（系统跟踪、开关控制等纯系统进程）默认隐藏，由「显示系统应用」开关控制。
+            val hasLauncher = pkg.packageName in launcherPackages
+            if (!hasLauncher && !prefs.current.showSystemApps) {
+                // 记录下来而不是悄悄丢掉：设置页可以展示「少了哪几个」，便于核对数量。
+                unlisted += UnlistedApp(pkg.packageName, label)
+                continue
+            }
+
             val icon = runCatching { appInfo.loadIcon(pm) }.getOrNull()
             val classified = prefs.current.categoryOverrides[pkg.packageName]
                 ?: catalog.classify(pkg.packageName)
@@ -55,7 +73,7 @@ class AppRepository(
                 hasLauncher = hasLauncher,
             )
         }
-        result
+        LoadResult(result, packages.size, unlisted.sortedWith(compareBy { it.label }))
     }
 
     /** 返回某个应用原始（系统提供的）名称与图标，供「恢复默认 / 首选原图标」使用。 */

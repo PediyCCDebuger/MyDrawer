@@ -79,7 +79,7 @@ fun AppMenuSheet(
             }
             Spacer(Modifier.height(8.dp))
             Text("移动到分类", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
-            Categories.orderedFor(prefs).filter { it.id != Categories.FREQUENT }.forEach { cat ->
+            Categories.moveTargets(prefs).forEach { cat ->
                 MenuItem(
                     if (cat.id == app.categoryId) Icons.Filled.CheckCircle else Icons.Filled.ArrowForward,
                     prefs.categoryLabels[cat.id] ?: cat.label,
@@ -124,7 +124,7 @@ fun CategoryMenuSheet(
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth().heightIn(max = maxList).verticalScroll(rememberScrollState())) {
             MenuItem(Icons.Filled.Add, "新建分类", onNew)
-            MenuItem(Icons.Filled.Checklist, "多选本分类应用", onMultiSelect)
+            MenuItem(Icons.Filled.Checklist, "多选分类", onMultiSelect)
             MenuItem(Icons.Filled.Edit, "重命名分类", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(Icons.Filled.SwapVert, "拖动排序分类", onReorderSort)
@@ -289,13 +289,17 @@ fun MoveDialog(
         Text("移动到分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
         Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-            categories.filter { it.id != Categories.FREQUENT }.forEach { cat ->
-                ListItem(
-                    headlineContent = { Text(labelOf(cat.id), color = Color.White) },
-                    modifier = Modifier.clickable { onPick(cat.id) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                )
-            }
+            // 「未分类」固定排最后：它是兜底项，新建分类不会插在它后面。
+            categories
+                .filter { it.id != Categories.FREQUENT }
+                .sortedBy { if (it.id == Categories.OTHER) 1 else 0 }
+                .forEach { cat ->
+                    ListItem(
+                        headlineContent = { Text(labelOf(cat.id), color = Color.White) },
+                        modifier = Modifier.clickable { onPick(cat.id) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -435,6 +439,55 @@ fun NestCategoryDialog(
     }
 }
 
+/** 分类多选：把选中的多个分类一起移入某个父分类，或一起移回顶层。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MoveCategoriesDialog(
+    selectedIds: Set<String>,
+    vm: DrawerViewModel,
+    prefs: UserPrefs,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit,
+) {
+    // 只保留对所有选中分类都合法的父分类（排除自身 / 后代 / 「最常用」），避免移动后成环。
+    val candidates = remember(prefs, selectedIds) {
+        Categories.orderedFor(prefs).filter { c ->
+            c.id != Categories.FREQUENT && c.id !in selectedIds &&
+                selectedIds.all { child -> !Categories.isDescendant(c.id, child, prefs.categoryParents) }
+        }
+    }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("移动 ${selectedIds.size} 个分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "移入父分类后，这些分类不再单独占用分类栏，而会出现在父分类里。",
+            color = DrawerColors.DialogSecondary,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            ListItem(
+                headlineContent = { Text("移回顶层（取消嵌套）", color = Color(0xFFFFE082)) },
+                leadingContent = { Icon(Icons.Filled.ArrowUpward, null, tint = Color(0xFFFFE082)) },
+                modifier = Modifier.clickable { onPick("") },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
+            candidates.forEach { cat ->
+                ListItem(
+                    headlineContent = { Text(vm.categoryLabel(cat.id), color = Color.White) },
+                    leadingContent = { Icon(Icons.Filled.Folder, null, tint = Color(0xFFBFD4FF)) },
+                    modifier = Modifier.clickable { onPick(cat.id) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+        }
+    }
+}
+
 /** 父分类内「子分类」手动排序对话框：按住右侧双横条调整子分类之间的顺序。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -512,6 +565,83 @@ fun TextInputDialog(
             Spacer(Modifier.width(8.dp))
             TextButton(onClick = { if (text.isNotBlank()) onConfirm(text) }) {
                 Text("确定", color = DrawerColors.Accent)
+            }
+        }
+    }
+}
+
+/**
+ * 新建分类对话框：名称 + 内置图标网格一次选好，避免建完再单独改图标。
+ */
+@Composable
+fun NewCategoryDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (label: String, iconKey: String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var iconKey by remember { mutableStateOf("builtin:apps") }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        // 内容（名称 + 图标网格）可能超出屏幕，限高并允许滚动，键盘弹出时按钮仍可达。
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.66f).dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Text("新建分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                label = { Text("名称", color = DrawerColors.DialogSecondary) },
+                textStyle = TextStyle(color = Color.White),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = DrawerColors.Accent,
+                    unfocusedBorderColor = Color(0x88FFFFFF),
+                    focusedLabelColor = DrawerColors.Accent,
+                    unfocusedLabelColor = DrawerColors.DialogSecondary,
+                    cursorColor = Color.White,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text("分类图标", color = DrawerColors.Accent, style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(6.dp))
+            LazyVerticalGrid(
+                GridCells.Adaptive(52.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 190.dp),
+            ) {
+                items(BuiltInIcons.ALL) { entry ->
+                    Box(
+                        Modifier
+                            .padding(3.dp)
+                            .size(46.dp)
+                            .background(
+                                if (entry.key == iconKey) DrawerColors.RailSelected else Color.Transparent,
+                                MaterialTheme.shapes.small,
+                            )
+                            .clickable { iconKey = entry.key },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            entry.vector,
+                            entry.label,
+                            tint = entry.color,
+                            modifier = Modifier.size(27.dp),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim(), iconKey) }) {
+                    Text("创建", color = DrawerColors.Accent)
+                }
             }
         }
     }

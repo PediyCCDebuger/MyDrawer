@@ -40,8 +40,14 @@ data class DrawerUiState(
     /** 多选模式与已选包。 */
     val selectMode: Boolean = false,
     val selected: Set<String> = emptySet(),
+    /** 分类多选：批量删除 / 移动分类（与应用多选互斥）。 */
+    val categorySelectMode: Boolean = false,
+    val selectedCategories: Set<String> = emptySet(),
     /** 系统使用统计（真实手机使用频率）；未授权时为空，回落到 app 内启动计数。 */
     val usageCounts: Map<String, Int> = emptyMap(),
+    /** 本机安装包总数（含因无桌面入口而未列出的），供设置页核对载入数量。 */
+    val totalInstalled: Int = 0,
+    val unlistedApps: List<AppRepository.UnlistedApp> = emptyList(),
     /**
      * 2.7.1 新增：进入嵌套子分类的返回栈。栈顶是上一级分类，
      * 返回键优先出栈回到上级分类，栈空才退出抽屉。
@@ -74,7 +80,8 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true)
-            val apps = repo.loadApps()
+            val loaded = repo.loadApps()
+            val apps = loaded.apps
             val usage = UsageStatsHelper.load(context)
             // 分类可能被删除/改名，返回栈里失效的入口要剔掉，否则返回键会退到空白视图。
             val validIds = Categories.orderedFor(prefs.current).map { it.id }.toSet() + "all"
@@ -84,7 +91,10 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 loading = false,
                 selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current, apps),
                 selected = _ui.value.selected.intersect(apps.map { it.packageName }.toSet()),
+                selectedCategories = _ui.value.selectedCategories.intersect(validIds - "all"),
                 usageCounts = usage,
+                totalInstalled = loaded.totalInstalled,
+                unlistedApps = loaded.unlisted,
                 categoryTrail = Categories.sanitizeTrail(_ui.value.categoryTrail, validIds),
             )
         }
@@ -119,6 +129,8 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             prefs = prefs.current,
             selectMode = false,
             selected = emptySet(),
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
             categoryTrail = emptyList(),
         )
     }
@@ -133,6 +145,8 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             selectedCategory = id,
             selectMode = false,
             selected = emptySet(),
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
             categoryTrail = Categories.pushTrail(_ui.value.categoryTrail, cur, id),
         )
     }
@@ -385,11 +399,17 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
-    /** 新建分类；若当前停在已删除分类上，创建后自动切到新分类。 */
-    fun createCategory(label: String): String {
+    /** 新建分类；可同时指定内置图标。[iconKey] 为空时沿用默认图标。 */
+    fun createCategory(label: String, iconKey: String? = null): String {
         val id = prefs.addCategory(label.trim())
+        if (!iconKey.isNullOrBlank()) prefs.setCategoryIcon(id, iconKey)
         prefs.update { it.copy(lastCategory = id) }
-        _ui.value = _ui.value.copy(prefs = prefs.current, selectedCategory = id)
+        _ui.value = _ui.value.copy(
+            prefs = prefs.current,
+            selectedCategory = id,
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
+        )
         notify("分类「${label.trim()}」已创建")
         return id
     }
@@ -497,7 +517,12 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     // ---- 多选 ----
 
     fun setSelectMode(on: Boolean) {
-        _ui.value = _ui.value.copy(selectMode = on, selected = if (on) emptySet() else emptySet())
+        _ui.value = _ui.value.copy(
+            selectMode = on,
+            selected = emptySet(),
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
+        )
     }
 
     fun toggleSelected(packageName: String) {
@@ -508,7 +533,12 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 应用长按菜单里的「多选」：直接进入多选模式，并预先勾选这个应用。 */
     fun startSelectFor(packageName: String) {
-        _ui.value = _ui.value.copy(selectMode = true, selected = setOf(packageName))
+        _ui.value = _ui.value.copy(
+            selectMode = true,
+            selected = setOf(packageName),
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
+        )
     }
 
     /**
@@ -525,7 +555,99 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             notify("该分类里没有可选择的应​用")
             return
         }
-        _ui.value = _ui.value.copy(selectMode = true, selected = ids)
+        _ui.value = _ui.value.copy(
+            selectMode = true,
+            selected = ids,
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
+        )
+    }
+
+    // ---- 分类多选（批量删除 / 移动分类） ----
+
+    /** 长按分类菜单里的「多选」：进入分类多选，并勾选当前分类。 */
+    fun startCategorySelect(categoryId: String) {
+        _ui.value = _ui.value.copy(
+            categorySelectMode = true,
+            selectedCategories = setOf(categoryId),
+            selectMode = false,
+            selected = emptySet(),
+            categoryTrail = emptyList(),
+        )
+    }
+
+    fun toggleCategorySelected(categoryId: String) {
+        val s = _ui.value
+        val next = if (categoryId in s.selectedCategories) {
+            s.selectedCategories - categoryId
+        } else {
+            s.selectedCategories + categoryId
+        }
+        _ui.value = s.copy(selectedCategories = next)
+    }
+
+    fun exitCategorySelect() {
+        _ui.value = _ui.value.copy(categorySelectMode = false, selectedCategories = emptySet())
+    }
+
+    /**
+     * 批量删除选中的分类。「未分类」「最常用」是兜底 / 虚拟入口，不参与删除；
+     * 其中的应用由 Repository 在下次刷新时归入「未分类」。
+     */
+    fun deleteSelectedCategories() {
+        val s = _ui.value
+        val deletable = s.selectedCategories.filter { it != Categories.OTHER && it != Categories.FREQUENT }
+        if (deletable.isEmpty()) {
+            notify("「未分类」「最常用」不能删除")
+            return
+        }
+        deletable.forEach { prefs.deleteCategory(it) }
+        _ui.value = _ui.value.copy(
+            prefs = prefs.current,
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
+            selectedCategory = fallbackCategory(s.selectedCategory, prefs.current),
+            categoryTrail = emptyList(),
+        )
+        refresh()
+        notify("已删除 ${deletable.size} 个分类，其中的应用已移入「未分类」")
+    }
+
+    /**
+     * 批量移动选中的分类到 [parentId] 下（空字符串表示移回顶层）。
+     * 冲突项（会成环 / 目标是自己）跳过，最后汇总提示。
+     */
+    fun moveSelectedCategories(parentId: String) {
+        val s = _ui.value
+        val ids = s.selectedCategories.toList()
+        if (ids.isEmpty()) {
+            notify("请先选择分类")
+            return
+        }
+        var moved = 0
+        var skipped = 0
+        ids.forEach { id ->
+            if (prefs.setCategoryParent(id, parentId)) moved++ else skipped++
+        }
+        // 当前停留的分类被移进别的分类后，分类栏里已没有它的入口，回到目标父分类。
+        val cur = s.selectedCategory
+        val nextCur = if (cur in ids && parentId.isNotEmpty()) parentId else cur
+        _ui.value = _ui.value.copy(
+            prefs = prefs.current,
+            categorySelectMode = false,
+            selectedCategories = emptySet(),
+            selectedCategory = nextCur,
+            categoryTrail = emptyList(),
+        )
+        refresh()
+        notify(
+            when {
+                moved == 0 -> "没有可移动的分类"
+                skipped > 0 -> "已移动 $moved 个分类，$skipped 个因嵌套关系冲突被跳过"
+                parentId.isEmpty() -> "已将 $moved 个分类移回顶层"
+                else -> "已将 $moved 个分类移入「${categoryLabel(parentId)}」"
+            },
+        )
     }
 
     fun selectAllVisible() {
