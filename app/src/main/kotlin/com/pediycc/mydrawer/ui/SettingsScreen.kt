@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.BuildConfig
@@ -66,7 +67,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     var hiddenManage by remember { mutableStateOf(false) }
     var columnsDialog by remember { mutableStateOf<Boolean?>(null) } // true=竖屏 false=横屏
-    var pinDialog by remember { mutableStateOf(false) }
+    var passwordDialog by remember { mutableStateOf(false) }
+    var unlockHiddenDialog by remember { mutableStateOf(false) }
     var iconManageDialog by remember { mutableStateOf(false) }
     val usageGranted = UsageStatsHelper.hasPermission(context)
 
@@ -172,7 +174,10 @@ fun SettingsScreen(
                     title = "管理隐藏应用",
                     subtitle = "已隐藏 ${prefs.hiddenPackages.size} 个",
                     icon = Icons.Filled.VisibilityOff,
-                    onClick = { hiddenManage = true },
+                    onClick = {
+                        // 设了密码就必须先验证；没设则直接进入。
+                        if (vm.hasPassword()) unlockHiddenDialog = true else hiddenManage = true
+                    },
                 )
             }
             item {
@@ -191,12 +196,13 @@ fun SettingsScreen(
                 )
             }
             item {
+                val hasPwd = prefs.hiddenAppsPasswordHash.isNotBlank()
                 SettingsRow(
-                    title = "使用 PIN",
-                    subtitle = "隐藏应用需输入密码（预留）",
-                    icon = Icons.Filled.Pin,
-                    onClick = { pinDialog = true },
-                    trailing = { Text("预留", color = DrawerColors.DialogSecondary) },
+                    title = "使用密码",
+                    subtitle = if (hasPwd) "管理隐藏应用时需输入密码" else "未设置，点此设置密码",
+                    icon = Icons.Filled.Lock,
+                    onClick = { passwordDialog = true },
+                    trailing = { Text(if (hasPwd) "已设置" else "未设置", color = DrawerColors.DialogSecondary) },
                 )
             }
 
@@ -359,16 +365,19 @@ fun SettingsScreen(
             }
         }
     }
-    if (pinDialog) {
-        ThemedDialog(onDismissRequest = { pinDialog = false }) {
-            Text("使用 PIN", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("此版本暂未启用 PIN 锁，功能预留。隐藏应用仍可通过长按菜单管理。", color = DrawerColors.DialogText)
-            Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { pinDialog = false }) { Text("知道了", color = DrawerColors.Accent) }
-            }
-        }
+    if (passwordDialog) {
+        PasswordSetupDialog(
+            vm = vm,
+            hasPassword = prefs.hiddenAppsPasswordHash.isNotBlank(),
+            onDismiss = { passwordDialog = false },
+        )
+    }
+    if (unlockHiddenDialog) {
+        PasswordPromptDialog(
+            vm = vm,
+            onDismiss = { unlockHiddenDialog = false },
+            onUnlocked = { unlockHiddenDialog = false; hiddenManage = true },
+        )
     }
 }
 
@@ -576,6 +585,148 @@ private fun ColumnDialog(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+        }
+    }
+}
+
+/** 设置 / 修改 / 清除「管理隐藏应用」密码。已设密码时，改密码需先验证旧密码；清除同理。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PasswordSetupDialog(vm: DrawerViewModel, hasPassword: Boolean, onDismiss: () -> Unit) {
+    var oldPwd by remember { mutableStateOf("") }
+    var newPwd by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        focusedBorderColor = DrawerColors.Accent,
+        unfocusedBorderColor = Color(0x88FFFFFF),
+        focusedLabelColor = DrawerColors.Accent,
+        unfocusedLabelColor = DrawerColors.DialogSecondary,
+        cursorColor = Color.White,
+    )
+
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text(if (hasPassword) "修改密码" else "设置密码", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "设置后，进入「管理隐藏应用」需要输入密码；清除后不再需要。",
+            color = DrawerColors.DialogText,
+            fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        if (hasPassword) {
+            OutlinedTextField(
+                value = oldPwd,
+                onValueChange = { oldPwd = it; error = null },
+                label = { Text("当前密码", color = DrawerColors.DialogSecondary) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                textStyle = TextStyle(color = Color.White),
+                colors = fieldColors,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        OutlinedTextField(
+            value = newPwd,
+            onValueChange = { newPwd = it; error = null },
+            label = { Text(if (hasPassword) "新密码" else "密码", color = DrawerColors.DialogSecondary) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            textStyle = TextStyle(color = Color.White),
+            colors = fieldColors,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = confirm,
+            onValueChange = { confirm = it; error = null },
+            label = { Text("确认密码", color = DrawerColors.DialogSecondary) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            textStyle = TextStyle(color = Color.White),
+            colors = fieldColors,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = Color(0xFFFF8A80), fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+            if (hasPassword) {
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = {
+                    if (!vm.checkPassword(oldPwd)) {
+                        error = "当前密码错误，无法清除"
+                    } else {
+                        vm.clearPassword()
+                        onDismiss()
+                    }
+                }) { Text("清除密码", color = Color(0xFFFF8A80)) }
+            }
+            Spacer(Modifier.width(4.dp))
+            TextButton(onClick = {
+                if (hasPassword && !vm.checkPassword(oldPwd)) {
+                    error = "当前密码错误"
+                } else if (newPwd.isBlank()) {
+                    error = "密码不能为空"
+                } else if (newPwd != confirm) {
+                    error = "两次输入的密码不一致"
+                } else {
+                    vm.setPassword(newPwd)
+                    onDismiss()
+                }
+            }) { Text("确定", color = DrawerColors.Accent) }
+        }
+    }
+}
+
+/** 进入「管理隐藏应用」前的密码校验框。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PasswordPromptDialog(vm: DrawerViewModel, onDismiss: () -> Unit, onUnlocked: () -> Unit) {
+    var pwd by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("输入密码", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = pwd,
+            onValueChange = { pwd = it; error = null },
+            label = { Text("密码", color = DrawerColors.DialogSecondary) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            textStyle = TextStyle(color = Color.White),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = DrawerColors.Accent,
+                unfocusedBorderColor = Color(0x88FFFFFF),
+                focusedLabelColor = DrawerColors.Accent,
+                unfocusedLabelColor = DrawerColors.DialogSecondary,
+                cursorColor = Color.White,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = Color(0xFFFF8A80), fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = {
+                if (vm.checkPassword(pwd)) onUnlocked() else error = "密码错误"
+            }) { Text("确定", color = DrawerColors.Accent) }
         }
     }
 }

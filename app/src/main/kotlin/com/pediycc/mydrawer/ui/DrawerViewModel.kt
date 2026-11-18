@@ -141,6 +141,25 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         notify("已更新隐藏应用")
     }
 
+    // ---- 管理隐藏应用密码 ----
+
+    fun hasPassword(): Boolean = prefs.hasPassword()
+
+    /** 校验口令，正确返回 true；错误提示由调用它的对话框内联显示。 */
+    fun checkPassword(raw: String): Boolean = prefs.verifyPassword(raw)
+
+    fun setPassword(raw: String) {
+        prefs.setPassword(raw)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        notify(if (raw.isEmpty()) "密码已清除" else "密码已设置")
+    }
+
+    fun clearPassword() {
+        prefs.clearPassword()
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        notify("密码已清除")
+    }
+
     fun setCategoryOverride(packageName: String, categoryId: String) {
         prefs.overrideCategory(packageName, categoryId)
         refresh()

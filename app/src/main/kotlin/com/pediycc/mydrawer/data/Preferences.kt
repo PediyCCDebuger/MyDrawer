@@ -57,6 +57,11 @@ data class UserPrefs(
      * 空字符串 = 进入上次使用的分类（[lastCategory]）；否则固定进入该分类 id / "all"。
      */
     val startupCategory: String = "",
+    /**
+     * 2.6.0 新增：管理隐藏应用前需要输入的口令摘要（SHA-256 + 固定盐）。
+     * 空字符串表示未启用密码；只存摘要，不存明文。
+     */
+    val hiddenAppsPasswordHash: String = "",
 )
 
 object SortMode {
@@ -110,6 +115,22 @@ class Preferences(context: Context) {
     }
 
     fun isHidden(packageName: String): Boolean = packageName in current.hiddenPackages
+
+    /** 是否已设置「管理隐藏应用」密码。 */
+    fun hasPassword(): Boolean = current.hiddenAppsPasswordHash.isNotBlank()
+
+    /** 校验输入口令是否正确。 */
+    fun verifyPassword(raw: String): Boolean = PasswordHash.verify(raw, current.hiddenAppsPasswordHash)
+
+    /** 设置 / 修改口令；空字符串等同清除。 */
+    fun setPassword(raw: String) {
+        update { it.copy(hiddenAppsPasswordHash = if (raw.isEmpty()) "" else PasswordHash.hash(raw)) }
+    }
+
+    /** 清除口令。 */
+    fun clearPassword() {
+        update { it.copy(hiddenAppsPasswordHash = "") }
+    }
 
     fun toggleHidden(packageName: String) {
         update { p ->

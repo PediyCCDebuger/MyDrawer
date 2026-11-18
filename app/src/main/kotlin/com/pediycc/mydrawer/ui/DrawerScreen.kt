@@ -66,6 +66,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
     var newCategoryDialog by remember { mutableStateOf(false) }
     var showUsagePrompt by remember { mutableStateOf(false) }
     var categoryReorderOpen by remember { mutableStateOf(false) }
+    var appReorderTarget by remember { mutableStateOf<String?>(null) }
 
     // 第一次进入且未授予「使用情况访问权限」时提示一次；用户选「暂不」后不再打扰。
     LaunchedEffect(Unit) {
@@ -250,6 +251,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onNew = { newCategoryDialog = true; menuCategory = null },
             onDelete = { vm.deleteCategory(id); menuCategory = null },
             onReorderSort = { categoryReorderOpen = true; menuCategory = null },
+            onReorderApps = { appReorderTarget = id; menuCategory = null },
         )
     }
 
@@ -258,6 +260,15 @@ fun DrawerScreen(vm: DrawerViewModel) {
             vm = vm,
             prefs = state.prefs,
             onDismiss = { categoryReorderOpen = false },
+        )
+    }
+
+    appReorderTarget?.let { id ->
+        AppReorderDialog(
+            categoryId = id,
+            vm = vm,
+            prefs = state.prefs,
+            onDismiss = { appReorderTarget = null },
         )
     }
 
@@ -337,7 +348,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
     // 弹窗/底部菜单自己处理返回键，这里不要抢；只有设置页和多选需要自己收尾。
     val overlayOpen = menuApp != null || menuCategory != null || moveCategoryOpen ||
         renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate ||
-        newCategoryDialog || showUsagePrompt || categoryReorderOpen
+        newCategoryDialog || showUsagePrompt || categoryReorderOpen || appReorderTarget != null
     // 设置页 / 多选都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
     // 放在最后注册，保证优先于主界面的默认返回行为。
     BackHandler(enabled = !overlayOpen && (showSettings || state.selectMode)) {

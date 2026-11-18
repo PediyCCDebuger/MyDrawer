@@ -105,6 +105,21 @@ class SorterTest {
         assertEquals(false, parsed.prefs.usagePromptShown)
         assertEquals(emptyList<String>(), parsed.prefs.customCategories)
         assertEquals(emptySet<String>(), parsed.prefs.deletedCategories)
+        assertEquals("", parsed.prefs.hiddenAppsPasswordHash)
+        assertEquals("", parsed.prefs.startupCategory)
+        assertEquals("all", parsed.prefs.lastCategory)
+    }
+
+    @Test
+    fun `password hash verifies correctly and never stores plaintext`() {
+        val hash = PasswordHash.hash("myPass123")
+        assertEquals(true, PasswordHash.verify("myPass123", hash))
+        assertEquals(false, PasswordHash.verify("wrong", hash))
+        assertEquals(false, PasswordHash.verify("myPass123", ""))
+        assert(!hash.contains("myPass123"))
+        assert(hash != "myPass123")
+        // 加盐后同一口令的摘要固定，可跨进程校验（存进备份再导入仍可验证）。
+        assertEquals(hash, PasswordHash.hash("myPass123"))
     }
 
     @Test

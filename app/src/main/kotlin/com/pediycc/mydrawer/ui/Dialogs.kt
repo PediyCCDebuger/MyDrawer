@@ -3,7 +3,7 @@ package com.pediycc.mydrawer.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +92,7 @@ fun CategoryMenuSheet(
     onNew: () -> Unit,
     onDelete: () -> Unit,
     onReorderSort: () -> Unit,
+    onReorderApps: () -> Unit,
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
     val deletable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
@@ -116,33 +117,15 @@ fun CategoryMenuSheet(
                 MenuItem(
                     if (mode == currentMode) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
                     label,
-                    { vm.setCategorySort(categoryId, mode) },
+                    {
+                        vm.setCategorySort(categoryId, mode)
+                        // 选「手动排序」时直接弹出独立的单列拖拽排序界面，不再内嵌在菜单里。
+                        if (mode == SortMode.MANUAL) onReorderApps()
+                    },
                 )
             }
             if (currentMode == SortMode.MANUAL) {
-                Spacer(Modifier.height(8.dp))
-                Text("手动排序（长按拖放调整位置）", style = MaterialTheme.typography.labelSmall, color = DrawerColors.DialogSecondary)
-                val apps = remember(prefs) { com.pediycc.mydrawer.data.Sorter.manualOrderOf(vm.ui.value.apps, prefs, categoryId) }
-                DragReorderList(
-                    items = apps,
-                    keyOf = { it },
-                    rowHeight = 40.dp,
-                    onReorder = { from, to -> vm.reorderManual(categoryId, from, to) },
-                ) { pkg, dragging ->
-                    val label = vm.ui.value.apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(40.dp)
-                            .background(if (dragging) Color(0x33FFFFFF) else Color.Transparent)
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.DragHandle, null, tint = DrawerColors.DialogSecondary, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(label, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
-                    }
-                }
+                MenuItem(Icons.Filled.Reorder, "拖动排序此分类应用", onReorderApps)
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -150,7 +133,9 @@ fun CategoryMenuSheet(
 }
 
 /**
- * 通用拖拽排序列表：长按某一行后上下拖动，越过相邻行即交换位置并即时生效。
+ * 通用拖拽排序列表：按住行右侧的双横条直接上下拖动，越过相邻行即换位并即时生效。
+ * 每行用 key(k) 固定身份 —— 之前重排后 Compose 按位置复用 slot，导致手势节点被销毁重建，
+ * 一次拖动只能移动一格；加 key 后手势不中断，可一口气拖到任意位置。
  * [onReorder] 参数为移动前 / 移动后的下标。
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -171,41 +156,88 @@ private fun <T> DragReorderList(
     val latestOnReorder by rememberUpdatedState(onReorder)
 
     Column {
-        items.forEachIndexed { _, item ->
+        items.forEach { item ->
             val k = keyOf(item)
-            val dragging = draggingKey == k
+            key(k) {
+                val dragging = draggingKey == k
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(rowHeight)
+                        .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                        .background(if (dragging) Color(0x33FFFFFF) else Color.Transparent),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 内容（图标 + 名称）在左，占满剩余空间；拖手统一由本组件放在最右侧。
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        row(item, dragging)
+                    }
+                    // 右侧加粗双横条拖手：按住直接拖动，不必长按。
+                    Box(
+                        Modifier
+                            .width(48.dp)
+                            .fillMaxHeight()
+                            .pointerInput(k) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        draggingKey = k
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        if (draggingKey != k) return@detectDragGestures
+                                        dragOffset += dragAmount.y
+                                        val list = latestItems
+                                        val from = list.indexOfFirst { latestKeyOf(it) == k }
+                                        if (from < 0 || rowPx <= 0f) return@detectDragGestures
+                                        val shift = (dragOffset / rowPx).toInt()
+                                        if (shift == 0) return@detectDragGestures
+                                        val to = (from + shift).coerceIn(0, list.lastIndex)
+                                        val applied = to - from
+                                        if (applied != 0) {
+                                            latestOnReorder(from, to)
+                                            dragOffset -= applied * rowPx
+                                        } else {
+                                            dragOffset = 0f
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        draggingKey = null
+                                        dragOffset = 0f
+                                    },
+                                    onDragCancel = {
+                                        draggingKey = null
+                                        dragOffset = 0f
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        DragGrip(active = dragging)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 两条加粗圆角横条，仿原版排序界面右侧的拖动手柄。 */
+@Composable
+private fun DragGrip(active: Boolean) {
+    Column(
+        modifier = Modifier.width(30.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        repeat(2) {
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
-                    .pointerInput(k) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = { draggingKey = k; dragOffset = 0f },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                if (draggingKey != k) return@detectDragGesturesAfterLongPress
-                                dragOffset += dragAmount.y
-                                val list = latestItems
-                                val from = list.indexOfFirst { latestKeyOf(it) == draggingKey }
-                                if (from < 0 || rowPx <= 0f) return@detectDragGesturesAfterLongPress
-                                val shift = (dragOffset / rowPx).toInt()
-                                if (shift == 0) return@detectDragGesturesAfterLongPress
-                                val to = (from + shift).coerceIn(0, list.lastIndex)
-                                val applied = to - from
-                                if (applied != 0) {
-                                    latestOnReorder(from, to)
-                                    dragOffset -= applied * rowPx
-                                } else {
-                                    dragOffset = 0f
-                                }
-                            },
-                            onDragEnd = { draggingKey = null; dragOffset = 0f },
-                            onDragCancel = { draggingKey = null; dragOffset = 0f },
-                        )
-                    }
-            ) {
-                row(item, dragging)
-            }
+                    .size(width = 30.dp, height = 4.dp)
+                    .background(
+                        if (active) Color.White else Color(0xD0FFFFFF),
+                        MaterialTheme.shapes.extraSmall,
+                    )
+            )
         }
     }
 }
@@ -247,7 +279,7 @@ fun MoveDialog(
     }
 }
 
-/** 分类拖拽排序对话框：长按分类行上下拖动即可自由调整分类栏顺序。 */
+/** 分类拖拽排序对话框：按住右侧双横条上下拖动即可自由调整分类栏顺序。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
@@ -255,26 +287,68 @@ fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -
     ThemedDialog(onDismissRequest = onDismiss) {
         Text("拖动排序分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
-        Text("长按分类上下拖动，调整分类栏显示顺序。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+        Text("按住每行右侧的两条横条上下拖动，调整分类栏显示顺序。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             DragReorderList(
                 items = cats,
                 keyOf = { it.id },
-                rowHeight = 44.dp,
+                rowHeight = 48.dp,
                 onReorder = { from, to -> vm.reorderCategory(from, to) },
-            ) { cat, dragging ->
+            ) { cat, _ ->
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .background(if (dragging) Color(0x33FFFFFF) else Color.Transparent)
-                        .padding(horizontal = 4.dp),
+                    Modifier.fillMaxSize().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.DragHandle, null, tint = DrawerColors.DialogSecondary, modifier = Modifier.size(18.dp))
+                    DrawerIcon(
+                        key = vm.categoryIconKey(cat.id),
+                        fallbackVector = BuiltInIcons.vectorOf(cat.iconKey),
+                        size = 30.dp,
+                        contentDescription = null,
+                        colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(cat.id)),
+                    )
                     Spacer(Modifier.width(10.dp))
                     Text(vm.categoryLabel(cat.id), color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("完成", color = DrawerColors.Accent) }
+        }
+    }
+}
+
+/** 分类内应用拖拽排序对话框：独立的单列界面，按住右侧双横条拖到任意位置。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppReorderDialog(categoryId: String, vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
+    val pkgs = remember(prefs) { com.pediycc.mydrawer.data.Sorter.manualOrderOf(vm.ui.value.apps, prefs, categoryId) }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("排序 · ${vm.categoryLabel(categoryId)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text("按住每行右侧的两条横条上下拖动，把应用放到任意位置。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+            DragReorderList(
+                items = pkgs,
+                keyOf = { it },
+                rowHeight = 52.dp,
+                onReorder = { from, to -> vm.reorderManual(categoryId, from, to) },
+            ) { pkg, _ ->
+                val app = vm.ui.value.apps.firstOrNull { it.packageName == pkg }
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DrawerIcon(
+                        key = vm.appIconKey(pkg),
+                        fallback = app,
+                        size = 34.dp,
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(app?.label ?: pkg, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
                 }
             }
         }
