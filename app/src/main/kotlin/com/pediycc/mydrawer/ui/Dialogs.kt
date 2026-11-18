@@ -36,6 +36,7 @@ fun AppMenuSheet(
     prefs: UserPrefs,
     onDismiss: () -> Unit,
     onLaunch: () -> Unit,
+    onDetails: () -> Unit,
     onToggleHidden: () -> Unit,
     onSetCategory: (String) -> Unit,
     onRename: () -> Unit,
@@ -47,6 +48,7 @@ fun AppMenuSheet(
             Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = DrawerColors.DialogSecondary)
             Spacer(Modifier.height(12.dp))
             MenuItem(Icons.Filled.Launch, "启动应用", onLaunch)
+            MenuItem(Icons.Filled.Info, "属性", onDetails)
             MenuItem(Icons.Filled.Edit, "重命名", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(

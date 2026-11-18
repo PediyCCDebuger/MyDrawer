@@ -17,6 +17,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,24 @@ import com.pediycc.mydrawer.data.Updater
 @Composable
 fun DrawerScreen(vm: DrawerViewModel) {
     val state by vm.ui.collectAsState()
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+
+    /** 启动成功就结束抽屉自身，不让它留在最近任务/后台等待。 */
+    fun launchAndFinish(packageName: String) {
+        if (vm.launch(packageName)) activity?.finish()
+    }
+
+    /** 跳系统应用详情页（长按菜单里的「属性」）。 */
+    fun openAppDetails(packageName: String) {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(android.net.Uri.parse("package:$packageName"))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
 
     var showSettings by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
@@ -136,25 +156,37 @@ fun DrawerScreen(vm: DrawerViewModel) {
                 }
                 if (state.prefs.leftHanded) {
                     Box(Modifier.weight(1f)) {
-                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it })
+                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
                     }
                     rail()
                 } else {
                     rail()
                     Box(Modifier.weight(1f)) {
-                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it })
+                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
                     }
                 }
             }
         }
 
         if (state.selectMode) {
-            Surface(
-                color = Color(0xE6202328),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                shape = MaterialTheme.shapes.medium,
+            // 外层让开系统导航栏，内层才是提示条本身；否则提示条会被导航栏盖住/裁掉。
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Text("点击应用选择 · 点右上角箭头移动到分类", color = Color.White, modifier = Modifier.padding(12.dp))
+                Surface(
+                    color = Color(0xE6202328),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text(
+                        "点击应用选择 · 右上角箭头可移动到分类",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
             }
         }
     }
@@ -178,7 +210,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
             app = app,
             prefs = state.prefs,
             onDismiss = { menuApp = null },
-            onLaunch = { vm.launch(app.packageName); menuApp = null },
+            onLaunch = { launchAndFinish(app.packageName); menuApp = null },
+            onDetails = { openAppDetails(app.packageName); menuApp = null },
             onToggleHidden = { vm.toggleHidden(app.packageName); menuApp = null },
             onSetCategory = { vm.setCategoryOverride(app.packageName, it); menuApp = null },
             onRename = { renameAppTarget = app; menuApp = null },
@@ -233,9 +266,17 @@ fun DrawerScreen(vm: DrawerViewModel) {
         )
     }
 
-    // 设置页是主界面上的一层，不是独立 Activity；按系统返回键应与左上角箭头一样返回抽屉。
-    // 放在最后注册，保证优先于主界面的默认返回行为，不会直接退出应用。
-    BackHandler(enabled = showSettings) { showSettings = false }
+    // 弹窗/底部菜单自己处理返回键，这里不要抢；只有设置页和多选需要自己收尾。
+    val overlayOpen = menuApp != null || menuCategory != null || moveCategoryOpen ||
+        renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate
+    // 设置页 / 多选都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
+    // 放在最后注册，保证优先于主界面的默认返回行为。
+    BackHandler(enabled = !overlayOpen && (showSettings || state.selectMode)) {
+        when {
+            showSettings -> showSettings = false
+            state.selectMode -> vm.setSelectMode(false)
+        }
+    }
 }
 
 @Composable
@@ -245,6 +286,7 @@ private fun AppArea(
     searchOpen: Boolean,
     onSearchToggle: () -> Unit,
     onMenu: (AppInfo) -> Unit,
+    onLaunch: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         // 原版 searchBox 默认 gone，点顶部搜索按钮才显示；输入框本身无边框、透明背景。
@@ -278,7 +320,9 @@ private fun AppArea(
                 CircularProgressIndicator(color = Color.White)
             }
         } else {
-            val groups = remember(state.apps, state.query, state.selectedCategory, state.prefs) {
+            val groups = remember(
+                state.apps, state.query, state.selectedCategory, state.prefs, state.usageCounts
+            ) {
                 vm.visibleGroups()
             }
             AppGrid(
@@ -286,6 +330,7 @@ private fun AppArea(
                 state = state,
                 groups = groups,
                 onMenu = onMenu,
+                onLaunch = onLaunch,
             )
         }
     }
@@ -301,11 +346,14 @@ private fun CategoryRail(
     onSelect: (String) -> Unit,
     onLongClick: (String) -> Unit,
 ) {
+    // 分类图标尺寸独立可调，默认比应用图标大一档。
+    val iconSize = (30 * prefs.categoryIconSizePercent / 100f).coerceIn(20f, 54f).dp
+    val tileSize = (44 * prefs.categoryIconSizePercent / 100f).coerceIn(34f, 58f).dp
     // 分类栏只比纯黑略浅一档：既能和内容区区分，又不会像白底那样压住白色分类文字。
     Column(
         Modifier
             .fillMaxHeight()
-            .width(if (prefs.showCategoryLabels) 76.dp else 58.dp)
+            .width(if (prefs.showCategoryLabels) 76.dp else 64.dp)
             .background(DrawerColors.RailBackground)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -321,7 +369,7 @@ private fun CategoryRail(
             ) {
                 Box(
                     Modifier
-                        .size(48.dp)
+                        .size(tileSize)
                         .background(
                             if (selected == "all") DrawerColors.RailSelected else Color.Transparent,
                             MaterialTheme.shapes.small,
@@ -332,7 +380,7 @@ private fun CategoryRail(
                         Icons.Filled.Apps,
                         "全部",
                         tint = DrawerColors.AllIcon,
-                        modifier = Modifier.size(26.dp),
+                        modifier = Modifier.size(iconSize),
                     )
                 }
                 if (prefs.showCategoryLabels) {
@@ -357,7 +405,7 @@ private fun CategoryRail(
             ) {
                 Box(
                     Modifier
-                        .size(48.dp)
+                        .size(tileSize)
                         .background(
                             if (catSelected) DrawerColors.RailSelected else Color.Transparent,
                             MaterialTheme.shapes.small,
@@ -368,7 +416,7 @@ private fun CategoryRail(
                     DrawerIcon(
                         key = vm.categoryIconKey(cat.id),
                         fallbackVector = BuiltInIcons.vectorOf(cat.iconKey),
-                        size = 28.dp,
+                        size = iconSize,
                         contentDescription = cat.label,
                         colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(cat.id)),
                     )
@@ -396,8 +444,12 @@ private fun AppGrid(
     state: com.pediycc.mydrawer.ui.DrawerUiState,
     groups: List<Pair<String, List<AppInfo>>>,
     onMenu: (AppInfo) -> Unit,
+    onLaunch: (String) -> Unit,
 ) {
-    val columns = if (state.prefs.gridColumns > 0) state.prefs.gridColumns else 4
+    // 横屏 / 竖屏分别使用各自的列数设置。
+    val landscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val configured = if (landscape) state.prefs.landscapeColumns else state.prefs.gridColumns
+    val columns = if (configured > 0) configured else if (landscape) 6 else 4
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 6.dp),
@@ -426,7 +478,7 @@ private fun AppGrid(
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 if (state.selectMode) vm.toggleSelected(app.packageName)
-                                else vm.launch(app.packageName)
+                                else onLaunch(app.packageName)
                             },
                             onLongClick = {
                                 if (state.selectMode) vm.toggleSelected(app.packageName)
@@ -460,12 +512,15 @@ private fun AppTile(
             .background(if (selected) Color(0x998FB4FF) else Color.Transparent, MaterialTheme.shapes.small),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        DrawerIcon(
-            key = vm.appIconKey(app.packageName),
-            fallback = app,
-            size = iconSize,
-            contentDescription = app.label,
-        )
+        // 「图标规范化」开启时给第三方图标留内边距，避免异形图标顶满格子。
+        Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
+            DrawerIcon(
+                key = vm.appIconKey(app.packageName),
+                fallback = app,
+                size = if (state.prefs.normalizeIcons) (iconSize.value * 0.88f).dp else iconSize,
+                contentDescription = app.label,
+            )
+        }
         if (state.prefs.showAppLabels) {
             Spacer(Modifier.height(4.dp))
             Text(

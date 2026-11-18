@@ -77,6 +77,20 @@ class SorterTest {
     }
 
     @Test
+    fun `usage stats take precedence over in-app launch counts`() {
+        val apps = listOf(app("a", "A", "games"), app("b", "B", "tools"))
+        val prefs = UserPrefs(
+            frequentEnabled = true,
+            launchCounts = mapOf("a" to 99, "b" to 1),
+        )
+        val realUsage = mapOf("a" to 1, "b" to 50)
+        val frequent = Sorter.groupEx(apps, prefs, realUsage)
+            .first { it.first == Categories.FREQUENT }.second
+        assertEquals("b", frequent.first().packageName)
+        assertEquals(listOf("b", "a"), frequent.map { it.packageName })
+    }
+
+    @Test
     fun `old backup prefs still decode with new fields defaulted`() {
         val raw = """{"format":"mydrawer-backup","version":1,"prefs":{"hiddenPackages":["x"],"gridColumns":5}}"""
         val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
@@ -85,6 +99,8 @@ class SorterTest {
         assertEquals(5, parsed.prefs.gridColumns)
         assertEquals(true, parsed.prefs.frequentEnabled)
         assertEquals(true, parsed.prefs.allEnabled)
+        assertEquals(130, parsed.prefs.categoryIconSizePercent)
+        assertEquals(true, parsed.prefs.normalizeIcons)
         assertEquals(Updater.PROXY_DIRECT, parsed.prefs.updateProxy)
     }
 

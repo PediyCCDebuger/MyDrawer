@@ -15,6 +15,7 @@ import com.pediycc.mydrawer.data.Preferences
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Sorter
 import com.pediycc.mydrawer.data.Updater
+import com.pediycc.mydrawer.data.UsageStatsHelper
 import com.pediycc.mydrawer.data.UserPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,8 @@ data class DrawerUiState(
     /** 多选模式与已选包。 */
     val selectMode: Boolean = false,
     val selected: Set<String> = emptySet(),
+    /** 系统使用统计（真实手机使用频率）；未授权时为空，回落到 app 内启动计数。 */
+    val usageCounts: Map<String, Int> = emptyMap(),
 )
 
 class DrawerViewModel(app: Application) : AndroidViewModel(app) {
@@ -50,13 +53,22 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true)
             val apps = repo.loadApps()
+            val usage = UsageStatsHelper.load(context)
             _ui.value = _ui.value.copy(
                 apps = apps,
                 prefs = prefs.current,
                 loading = false,
                 selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
                 selected = _ui.value.selected.intersect(apps.map { it.packageName }.toSet()),
+                usageCounts = usage,
             )
+        }
+    }
+
+    /** 从系统「使用情况访问权限」设置页返回后重新读取真实使用频率。 */
+    fun reloadUsage() {
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(usageCounts = UsageStatsHelper.load(context))
         }
     }
 
@@ -80,17 +92,22 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- 应用操作 ----
 
-    fun launch(packageName: String) {
+    /** 启动应用；成功返回 true，界面据此 finish 自身，不让抽屉留在后台。 */
+    fun launch(packageName: String): Boolean {
         val intent = repo.getLaunchIntent(packageName)
-        if (intent != null) {
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            runCatching { context.startActivity(intent) }
-                .onFailure { notify("无法启动该应用") }
+        if (intent == null) {
+            notify("该应用没有可启动入口")
+            return false
+        }
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        val ok = runCatching { context.startActivity(intent) }
+            .onFailure { notify("无法启动该应用") }
+            .isSuccess
+        if (ok) {
             prefs.recordLaunch(packageName)
             _ui.value = _ui.value.copy(prefs = prefs.current)
-        } else {
-            notify("该应用没有可启动入口")
         }
+        return ok
     }
 
     fun toggleHidden(packageName: String) {
@@ -139,6 +156,13 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             refresh()
             notify("图标已更改")
         }
+    }
+
+    /** 恢复所有应用与分类的默认图标。 */
+    fun resetCustomIcons() {
+        prefs.resetCustomIcons()
+        refresh()
+        notify("已恢复默认图标")
     }
 
     // ---- 分类操作 ----
@@ -356,25 +380,28 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 it.label.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true)
             }
         }
-        if (s.selectedCategory != "all") {
-            apps = apps.filter {
-                it.categoryId == s.selectedCategory ||
-                    (s.selectedCategory == Categories.FREQUENT && (s.prefs.launchCounts[it.packageName] ?: 0) > 0)
-            }
+        val counts = if (s.usageCounts.isNotEmpty()) s.usageCounts else s.prefs.launchCounts
+        if (s.selectedCategory == Categories.FREQUENT) {
+            // 「最常用」只显示这一个分组，不能再按应用自身分类重复列一遍（例如高德地图既出现在
+            // 最常用，又在下面出现「网络工具 / 高德地图」）。
+            apps = apps.filter { (counts[it.packageName] ?: 0) > 0 }
+        } else if (s.selectedCategory != "all") {
+            apps = apps.filter { it.categoryId == s.selectedCategory }
         }
-        // 「最常用」只是分类栏里的独立入口；「全部」和各分类内部不再追加一段最常用，
-        // 否则同一批应用会在列表底部重复出现。
-        return Sorter.groupEx(apps, s.prefs).filter { (id, _) ->
-            id != Categories.FREQUENT || s.selectedCategory == Categories.FREQUENT
+        // 「最常用」只是分类栏里的独立入口；「全部」和各分类内部不再追加一段最常用。
+        return Sorter.groupEx(apps, s.prefs, s.usageCounts).filter { (id, _) ->
+            if (s.selectedCategory == Categories.FREQUENT) id == Categories.FREQUENT
+            else id != Categories.FREQUENT
         }
     }
 
     fun categoryCount(categoryId: String): Int {
         val s = _ui.value
         val visible = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
+        val counts = if (s.usageCounts.isNotEmpty()) s.usageCounts else s.prefs.launchCounts
         return if (categoryId == "all") visible.size else visible.count {
             it.categoryId == categoryId ||
-                (categoryId == Categories.FREQUENT && (s.prefs.launchCounts[it.packageName] ?: 0) > 0)
+                (categoryId == Categories.FREQUENT && (counts[it.packageName] ?: 0) > 0)
         }
     }
 

@@ -14,12 +14,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.BuildConfig
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
+import com.pediycc.mydrawer.data.UsageStatsHelper
 import com.pediycc.mydrawer.data.UserPrefs
 
 @Composable
@@ -57,9 +59,12 @@ fun SettingsScreen(
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
+    val context = LocalContext.current
     var hiddenManage by remember { mutableStateOf(false) }
     var columnsDialog by remember { mutableStateOf<Boolean?>(null) } // true=竖屏 false=横屏
     var pinDialog by remember { mutableStateOf(false) }
+    var iconManageDialog by remember { mutableStateOf(false) }
+    val usageGranted = UsageStatsHelper.hasPermission(context)
 
     Scaffold(
         containerColor = DrawerColors.AppBackground,
@@ -86,19 +91,17 @@ fun SettingsScreen(
             // ---- 应用网格（原 pref_drawer / App grid） ----
             item { SectionTitle("应用网格") }
             item {
-                SwitchRow(
-                    title = "图标包",
-                    subtitle = "使用内置矢量图库（原版：Icon pack）",
+                SettingsRow(
+                    title = "自定义图标",
+                    subtitle = "管理已修改的应用与分类图标",
                     icon = Icons.Filled.Apps,
-                    checked = true,
-                    enabled = false,
-                    onCheckedChange = {},
+                    onClick = { iconManageDialog = true },
                 )
             }
             item {
                 StepperRow(
-                    title = "图标大小",
-                    subtitle = "原版：Icon Size · 当前 ${prefs.iconSizePercent}%",
+                    title = "应用图标大小",
+                    subtitle = "调整抽屉里应用图标的显示大小",
                     value = prefs.iconSizePercent,
                     range = 60..140,
                     step = 10,
@@ -107,19 +110,29 @@ fun SettingsScreen(
                 )
             }
             item {
+                StepperRow(
+                    title = "分类图标大小",
+                    subtitle = "调整左侧分类栏图标的显示大小",
+                    value = prefs.categoryIconSizePercent,
+                    range = 80..160,
+                    step = 10,
+                    suffix = "%",
+                    onValue = { v -> vm.updatePrefs { it.copy(categoryIconSizePercent = v) } },
+                )
+            }
+            item {
                 SwitchRow(
                     title = "图标规范化",
-                    subtitle = "自动调整大小以符合 Material 设计规范（原版：Normalize icons）",
+                    subtitle = "给应用图标留边，避免异形图标撑满格子",
                     icon = Icons.Filled.AutoAwesome,
-                    checked = true,
-                    enabled = false,
-                    onCheckedChange = {},
+                    checked = prefs.normalizeIcons,
+                    onCheckedChange = { v -> vm.updatePrefs { it.copy(normalizeIcons = v) } },
                 )
             }
             item {
                 SettingsRow(
                     title = "竖屏列数",
-                    subtitle = "原版：Portrait Columns · 当前 ${prefs.gridColumns} 列",
+                    subtitle = "当前 ${prefs.gridColumns} 列，竖屏时生效",
                     icon = Icons.Filled.ViewColumn,
                     onClick = { columnsDialog = true },
                 )
@@ -127,7 +140,7 @@ fun SettingsScreen(
             item {
                 SettingsRow(
                     title = "横屏列数",
-                    subtitle = "原版：Landscape Columns · 当前 ${prefs.landscapeColumns} 列",
+                    subtitle = "当前 ${prefs.landscapeColumns} 列，横屏时生效",
                     icon = Icons.Filled.GridView,
                     onClick = { columnsDialog = false },
                 )
@@ -135,7 +148,7 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     title = "显示图标名称",
-                    subtitle = "在应用图标旁显示名称（原版：Icons label Visibility）",
+                    subtitle = "在应用图标旁显示名称",
                     icon = Icons.Filled.Label,
                     checked = prefs.showAppLabels,
                     onCheckedChange = { v -> vm.updatePrefs { it.copy(showAppLabels = v) } },
@@ -152,12 +165,12 @@ fun SettingsScreen(
                 )
             }
 
-            // ---- 安全（原 prefSecurity / Security） ----
+            // ---- 安全 ----
             item { SectionTitle("安全") }
             item {
                 SettingsRow(
                     title = "管理隐藏应用",
-                    subtitle = "已隐藏 ${prefs.hiddenPackages.size} 个（原版：Manage hidden apps）",
+                    subtitle = "已隐藏 ${prefs.hiddenPackages.size} 个",
                     icon = Icons.Filled.VisibilityOff,
                     onClick = { hiddenManage = true },
                 )
@@ -180,19 +193,19 @@ fun SettingsScreen(
             item {
                 SettingsRow(
                     title = "使用 PIN",
-                    subtitle = "原版：Use PIN · 隐藏应用需输入密码（预留）",
+                    subtitle = "隐藏应用需输入密码（预留）",
                     icon = Icons.Filled.Pin,
                     onClick = { pinDialog = true },
                     trailing = { Text("预留", color = DrawerColors.DialogSecondary) },
                 )
             }
 
-            // ---- 程序列表（原 drawerTitle / Drawer） ----
+            // ---- 程序列表 ----
             item { SectionTitle("程序列表") }
             item {
                 SwitchRow(
                     title = "左手模式",
-                    subtitle = "将分类列表显示于画面右方（原版：Left-handed）",
+                    subtitle = "将分类列表显示于画面右方",
                     icon = Icons.Filled.SwapHoriz,
                     checked = prefs.leftHanded,
                     onCheckedChange = { v -> vm.updatePrefs { it.copy(leftHanded = v) } },
@@ -201,7 +214,7 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     title = "分类名称",
-                    subtitle = "在分类图标附近显示名称（原版：Categories Label）",
+                    subtitle = "在分类图标附近显示名称",
                     icon = Icons.Filled.Category,
                     checked = prefs.showCategoryLabels,
                     onCheckedChange = { v -> vm.updatePrefs { it.copy(showCategoryLabels = v) } },
@@ -219,16 +232,24 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     title = "最常用分类",
-                    subtitle = "按使用频率自动排列最常用的 10 个应用，默认排在分类栏最前",
+                    subtitle = "按本机真实使用频率排列最常用的 10 个应用，默认排在分类栏最前",
                     icon = Icons.Filled.Star,
                     checked = prefs.frequentEnabled,
                     onCheckedChange = { v -> vm.setFrequentEnabled(v) },
                 )
             }
             item {
+                SettingsRow(
+                    title = "使用频率权限",
+                    subtitle = if (usageGranted) "已授权，最常用来自系统使用统计" else "未授权，点击前往系统设置授权",
+                    icon = Icons.Filled.QueryStats,
+                    onClick = { UsageStatsHelper.openPermissionSettings(context) },
+                )
+            }
+            item {
                 SwitchRow(
                     title = "应用从底部排列",
-                    subtitle = "从底部开始显示应用（原版：Stack apps from bottom）",
+                    subtitle = "从底部开始显示应用",
                     icon = Icons.Filled.VerticalAlignBottom,
                     checked = prefs.stackFromBottom,
                     onCheckedChange = { v -> vm.updatePrefs { it.copy(stackFromBottom = v) } },
@@ -237,7 +258,7 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     title = "显示更新按钮",
-                    subtitle = "在右上角显示更新按钮（原版：Show menu button）",
+                    subtitle = "在右上角显示更新按钮",
                     icon = Icons.Filled.Menu,
                     checked = prefs.showMenuButton,
                     onCheckedChange = { v -> vm.updatePrefs { it.copy(showMenuButton = v) } },
@@ -274,7 +295,7 @@ fun SettingsScreen(
             }
             item {
                 Text(
-                    "MyDrawer ${BuildConfig.VERSION_NAME} · 仿 Smart Drawer 1.0.3 界面与功能，独立重写，未复制原版代码。",
+                    "MyDrawer ${BuildConfig.VERSION_NAME} · 独立重写，无广告、无统计、无内购。",
                     color = Color(0xEEFFFFFF),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(16.dp),
@@ -296,6 +317,26 @@ fun SettingsScreen(
                 columnsDialog = null
             },
         )
+    }
+    if (iconManageDialog) {
+        ThemedDialog(onDismissRequest = { iconManageDialog = false }) {
+            Text("自定义图标", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "可长按应用或分类单独更换图标。这里可以一次性清除所有已修改的图标，恢复系统应用图标与内置分类图标。",
+                color = DrawerColors.DialogText,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { iconManageDialog = false }) { Text("取消", color = DrawerColors.DialogText) }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = {
+                    vm.resetCustomIcons()
+                    iconManageDialog = false
+                }) { Text("恢复默认图标", color = DrawerColors.Accent) }
+            }
+        }
     }
     if (pinDialog) {
         ThemedDialog(onDismissRequest = { pinDialog = false }) {
@@ -467,10 +508,14 @@ private fun ColumnDialog(
     ThemedDialog(onDismissRequest = onDismiss) {
         Text(if (portrait) "竖屏列数" else "横屏列数", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
-        Column {
+        // 横屏时可用高度很小，必须限制高度并允许滚动，否则下面的选项和取消按钮会被裁掉。
+        Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
             values.forEach { n ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { onPick(n) }.padding(12.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(n) }
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(

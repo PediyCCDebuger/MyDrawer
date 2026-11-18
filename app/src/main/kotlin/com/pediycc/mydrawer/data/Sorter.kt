@@ -40,18 +40,22 @@ object Sorter {
         }
     }
 
-    /** 2.0：按用户分类顺序 + 每分类独立排序 + 最常用分类，组成完整分组。 */
+    /** 2.4：按用户分类顺序 + 每分类独立排序 + 最常用分类，组成完整分组。 */
     fun groupEx(
         apps: List<AppInfo>,
         prefs: UserPrefs,
+        /** 系统使用统计（真实手机使用频率）；为空时回落到应用内启动计数。 */
+        usageCounts: Map<String, Int> = emptyMap(),
     ): List<Pair<String, List<AppInfo>>> {
+        // 有系统统计就以系统为准；没授权/没数据才用 MyDrawer 自己的启动次数。
+        val counts = if (usageCounts.isNotEmpty()) usageCounts else prefs.launchCounts
         val categories = Categories.ordered(prefs.categoryOrder, prefs.frequentEnabled)
         return categories.mapNotNull { cat ->
             val inCat: List<AppInfo> = if (cat.id == Categories.FREQUENT) {
                 apps
-                    .filter { (prefs.launchCounts[it.packageName] ?: 0) > 0 }
+                    .filter { (counts[it.packageName] ?: 0) > 0 }
                     .sortedWith(
-                        compareByDescending<AppInfo> { prefs.launchCounts[it.packageName] ?: 0 }
+                        compareByDescending<AppInfo> { counts[it.packageName] ?: 0 }
                             .then { a, b -> collator.compare(a.label, b.label) }
                             .thenBy { it.packageName },
                     )
@@ -66,11 +70,11 @@ object Sorter {
                 if (explicit == null) {
                     cat.id to inCat
                 } else {
-                    cat.id to sort(inCat, explicit, prefs.launchCounts, prefs.manualOrders[cat.id] ?: emptyList())
+                    cat.id to sort(inCat, explicit, counts, prefs.manualOrders[cat.id] ?: emptyList())
                 }
             } else {
                 val mode = prefs.categorySortModes[cat.id] ?: prefs.sortMode
-                cat.id to sort(inCat, mode, prefs.launchCounts, prefs.manualOrders[cat.id] ?: emptyList())
+                cat.id to sort(inCat, mode, counts, prefs.manualOrders[cat.id] ?: emptyList())
             }
         }
     }

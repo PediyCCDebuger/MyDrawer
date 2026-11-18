@@ -23,6 +23,10 @@ data class UserPrefs(
     val stackFromBottom: Boolean = false,
     val showMenuButton: Boolean = true,
     val iconSizePercent: Int = 100,
+    /** 分类栏图标大小，默认比应用图标略大。 */
+    val categoryIconSizePercent: Int = 130,
+    /** 图标规范化：给第三方应用图标留一圈内边距，避免异形图标撑满格子。 */
+    val normalizeIcons: Boolean = true,
     val frequentEnabled: Boolean = true,
     /** 是否在分类栏显示「全部」入口。 */
     val allEnabled: Boolean = true,
@@ -150,6 +154,11 @@ class Preferences(context: Context) {
             java.util.Collections.swap(list, from, to)
             p.copy(manualOrders = p.manualOrders + (categoryId to list))
         }
+    }
+
+    /** 清除所有自定义应用 / 分类图标，回到内置图库与系统图标。 */
+    fun resetCustomIcons() {
+        update { it.copy(appIcons = emptyMap(), categoryIcons = emptyMap()) }
     }
 
     fun recordLaunch(packageName: String) {
