@@ -94,10 +94,9 @@ object DebugLog {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.CHINA).format(Date())
         val name = "MyDrawer-debug-$stamp.txt"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveToDownloadsMediaStore(context, name, body)
-                ?: saveToAppDir(context, name, body, "")
+            saveToDownloadsMediaStore(context, name, body) ?: saveToAppDir(context, name, body)
         } else {
-            saveToDownloadsLegacy(name, body) ?: saveToAppDir(context, name, body, "")
+            saveToDownloadsLegacy(name, body) ?: saveToAppDir(context, name, body)
         }
     } catch (e: Exception) {
         null
@@ -156,11 +155,11 @@ object DebugLog {
     }
 
     /** 兜底：应用专属外部目录（无需权限），保证任何机型都能导出。 */
-    private fun saveToAppDir(context: Context, name: String, body: String, note: String): String? = try {
+    private fun saveToAppDir(context: Context, name: String, body: String): String? = try {
         val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "logs")
         if (!dir.exists()) dir.mkdirs()
         File(dir, name).writeText(body, Charsets.UTF_8)
-        "$note${dir.absolutePath}/$name"
+        "${dir.absolutePath}/$name"
     } catch (e: Exception) {
         null
     }

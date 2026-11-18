@@ -10,9 +10,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -687,6 +693,20 @@ fun DebugLogDialog(
         statusTick++
     }
 
+    val saveLog: () -> Unit = {
+        val path = DebugLog.saveToFile(ctx)
+        when {
+            path == null -> report("保存失败：无法写入下载目录")
+            // 下载目录不可写时 DebugLog 会用「应用目录」兜底，提示里要说清楚。
+            path.startsWith("Download/") -> report("已保存到：$path")
+            else -> report("下载目录不可写，已存到应用目录：$path")
+        }
+    }
+    // Android 9 及以下写公共「下载」目录需要存储权限；拒绝授权时 DebugLog 会自动回退到应用目录。
+    val legacyPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { saveLog() }
+
     ThemedDialog(onDismissRequest = onDismiss) {
         Text("调试日志", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
@@ -749,9 +769,16 @@ fun DebugLogDialog(
             ) { Text("清空", color = DrawerColors.DialogText) }
             TextButton(
                 onClick = {
-                    val path = DebugLog.saveToFile(ctx)
-                    if (path != null) report("已保存到：$path")
-                    else report("保存失败：无法写入下载目录")
+                    val needLegacyPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                        ContextCompat.checkSelfPermission(
+                            ctx,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        ) != PackageManager.PERMISSION_GRANTED
+                    if (needLegacyPermission) {
+                        legacyPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    } else {
+                        saveLog()
+                    }
                 },
                 modifier = Modifier.weight(1f),
             ) { Text("保存", color = DrawerColors.Accent) }
