@@ -48,6 +48,7 @@ fun AppMenuSheet(
     onDismiss: () -> Unit,
     onLaunch: () -> Unit,
     onDetails: () -> Unit,
+    onPinToHome: () -> Unit,
     onToggleHidden: () -> Unit,
     onSetCategory: (String) -> Unit,
     onClearCategory: () -> Unit,
@@ -63,6 +64,7 @@ fun AppMenuSheet(
         Column(Modifier.fillMaxWidth().heightIn(max = maxList).verticalScroll(rememberScrollState())) {
             MenuItem(Icons.Filled.Launch, "启动应用", onLaunch)
             MenuItem(Icons.Filled.Info, "属性", onDetails)
+            MenuItem(Icons.Filled.AddToHomeScreen, "发送到桌面", onPinToHome)
             MenuItem(Icons.Filled.Edit, "重命名", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(

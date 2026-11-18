@@ -1,6 +1,7 @@
 package com.pediycc.mydrawer.data
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import kotlinx.coroutines.Dispatchers
@@ -16,14 +17,24 @@ class AppRepository(
 
     suspend fun loadApps(): List<AppInfo> = withContext(Dispatchers.IO) {
         val packages = pm.getInstalledPackages(0)
+        // 系统抽屉里真正能看到的程序 = 声明了 MAIN + LAUNCHER 且处于启用状态的活动。
+        // 注意不能用 getLaunchIntentForPackage：它会先匹配 CATEGORY_INFO，
+        // 于是「系统跟踪」「开关控制」这类没有桌面入口、只有设置页的系统应用也会被当成可见，
+        // 结果就是 MyDrawer 里多出一堆系统抽屉里根本没有的条目。
+        val launcherPackages: Set<String> = runCatching {
+            pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+                0,
+            ).mapNotNull { it.activityInfo?.packageName }.toSet()
+        }.getOrDefault(emptySet())
         val result = mutableListOf<AppInfo>()
         for (pkg in packages) {
             val appInfo: ApplicationInfo = pkg.applicationInfo ?: continue
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-            // 系统应用里「有启动入口」的（浏览器 / 应用商店 / 相机等）在原生系统抽屉里本就可见，
-            // 属于普通应用，始终列出；「显示系统应用」只控制那些无入口的纯系统进程。
-            val hasLauncher = pm.getLaunchIntentForPackage(pkg.packageName) != null
-            if (isSystem && !hasLauncher && !prefs.current.showSystemApps) continue
+            // 与系统抽屉一致：有桌面入口的（浏览器 / 应用商店 / 相机等）始终列出；
+            // 没有入口的（系统跟踪、开关控制等纯系统进程）默认隐藏，由「显示系统应用」开关控制。
+            val hasLauncher = pkg.packageName in launcherPackages
+            if (!hasLauncher && !prefs.current.showSystemApps) continue
 
             val label = prefs.current.appLabels[pkg.packageName]
                 ?: runCatching { appInfo.loadLabel(pm).toString() }

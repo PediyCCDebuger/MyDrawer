@@ -155,4 +155,18 @@ object Categories {
         orderedFor(prefs).filter { c ->
             c.id != FREQUENT && c.id != childId && !isDescendant(c.id, childId, prefs.categoryParents)
         }
+
+    // ---- 嵌套子分类的返回栈（纯函数，便于单测） ----
+
+    /** 进入子分类：把当前分类压入返回栈。[current] 与 [target] 相同时不重复压栈。 */
+    fun pushTrail(trail: List<String>, current: String, target: String): List<String> =
+        if (current == target) trail else trail + current
+
+    /** 返回上一级：返回 (上一级分类, 新返回栈)；栈空返回 null。 */
+    fun popTrail(trail: List<String>): Pair<String, List<String>>? =
+        if (trail.isEmpty()) null else trail.last() to trail.dropLast(1)
+
+    /** 剔除返回栈里已经失效（被删除）的分类，避免退回到空白视图。 */
+    fun sanitizeTrail(trail: List<String>, validIds: Set<String>): List<String> =
+        trail.filter { it in validIds }
 }

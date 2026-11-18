@@ -97,6 +97,12 @@ fun DrawerScreen(vm: DrawerViewModel) {
 
     // 2.3.0：固定纯黑不透明背景，不再透壁纸（透壁纸会导致滚动时整片重影）。
     Box(Modifier.fillMaxSize().background(DrawerColors.AppBackground)) {
+        // 顶栏标题后的数字：当前分类里实际显示的应用数量（跟随隐藏 / 搜索 / 分类切换变化）。
+        val visibleCount = remember(
+            state.apps, state.query, state.selectedCategory, state.prefs, state.usageCounts
+        ) {
+            vm.visibleGroups().sumOf { it.apps.size }
+        }
         Scaffold(
             containerColor = DrawerColors.AppBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -106,7 +112,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     title = {
                         Text(
                             if (state.selectMode) "已选择 ${state.selected.size} 项"
-                            else vm.categoryLabel(state.selectedCategory),
+                            else "${vm.categoryLabel(state.selectedCategory)}（$visibleCount）",
                             color = Color.White,
                             style = WallpaperTextShadowStyle,
                         )
@@ -115,6 +121,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
                         if (state.selectMode) {
                             IconButton(onClick = { vm.setSelectMode(false) }) {
                                 Icon(Icons.Filled.Close, "退出多选", tint = Color.White)
+                            }
+                        } else if (state.categoryTrail.isNotEmpty()) {
+                            // 从嵌套子分类返回上级分类，与返回键等价。
+                            IconButton(onClick = { vm.backToParentCategory() }) {
+                                Icon(Icons.Filled.ArrowBack, "返回上级分类", tint = Color.White)
                             }
                         }
                     },
@@ -238,6 +249,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onDismiss = { menuApp = null },
             onLaunch = { launchAndFinish(app.packageName); menuApp = null },
             onDetails = { openAppDetails(app.packageName); menuApp = null },
+            onPinToHome = { vm.pinToHome(app.packageName); menuApp = null },
             onToggleHidden = { vm.toggleHidden(app.packageName); menuApp = null },
             onSetCategory = { vm.setCategoryOverride(app.packageName, it); menuApp = null },
             onClearCategory = { vm.clearCategory(app.packageName); menuApp = null },
@@ -376,12 +388,16 @@ fun DrawerScreen(vm: DrawerViewModel) {
         renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate ||
         newCategoryDialog || showUsagePrompt || categoryReorderOpen || appReorderTarget != null ||
         nestCategoryTarget != null || childReorderTarget != null
-    // 设置页 / 多选都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
+    // 设置页 / 多选 / 嵌套子分类都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
     // 放在最后注册，保证优先于主界面的默认返回行为。
-    BackHandler(enabled = !overlayOpen && (showSettings || state.selectMode)) {
+    BackHandler(
+        enabled = !overlayOpen && (showSettings || state.selectMode || state.categoryTrail.isNotEmpty())
+    ) {
         when {
             showSettings -> showSettings = false
             state.selectMode -> vm.setSelectMode(false)
+            // 在嵌套子分类里：退回上一级分类。
+            else -> vm.backToParentCategory()
         }
     }
 }
@@ -439,7 +455,7 @@ private fun AppArea(
                 groups = groups,
                 onMenu = onMenu,
                 onLaunch = onLaunch,
-                onChildCategory = { vm.selectCategory(it) },
+                onChildCategory = { vm.openChildCategory(it) },
                 onChildMenu = { onChildMenu(it) },
             )
         }

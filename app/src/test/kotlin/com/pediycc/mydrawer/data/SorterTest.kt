@@ -1,6 +1,7 @@
 package com.pediycc.mydrawer.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SorterTest {
@@ -303,5 +304,47 @@ class SorterTest {
         assertEquals(mapOf("c1" to "utility"), decoded.categoryParents)
         assertEquals(NestedChildMode.BACK, decoded.nestedChildMode)
         assertEquals(listOf("c1"), decoded.nestedChildOrders["utility"])
+    }
+
+    // ---- 嵌套子分类的返回栈 ----
+    @Test
+    fun `category trail pushes parent and pops back to it`() {
+        // 从「工具」点进子分类「系统程序」
+        var trail = Categories.pushTrail(emptyList(), "utility", "c_child")
+        assertEquals(listOf("utility"), trail)
+
+        // 再点进孙子分类，栈变成 [utility, c_child]
+        trail = Categories.pushTrail(trail, "c_child", "c_grand")
+        assertEquals(listOf("utility", "c_child"), trail)
+
+        // 返回键先退回 c_child，再退回 utility，最后为空
+        val first = Categories.popTrail(trail)!!
+        assertEquals("c_child", first.first)
+        assertEquals(listOf("utility"), first.second)
+        val second = Categories.popTrail(first.second)!!
+        assertEquals("utility", second.first)
+        assertNull(Categories.popTrail(second.second))
+    }
+
+    @Test
+    fun `category trail does not push the same category twice`() {
+        assertEquals(listOf("utility"), Categories.pushTrail(listOf("utility"), "utility", "utility"))
+    }
+
+    @Test
+    fun `deleted categories are dropped from the trail`() {
+        val trail = Categories.sanitizeTrail(listOf("utility", "gone"), setOf("utility", "all"))
+        assertEquals(listOf("utility"), trail)
+    }
+
+    @Test
+    fun `category whose parent was deleted counts as top level`() {
+        val p = UserPrefs(
+            customCategories = listOf("c_child"),
+            categoryLabels = mapOf("c_child" to "系统程序"),
+            categoryParents = mapOf("c_child" to "utility"),
+            deletedCategories = setOf("utility"),
+        )
+        assert(Categories.topLevel(p).any { it.id == "c_child" })
     }
 }

@@ -185,9 +185,9 @@ fun SettingsScreen(
                 SettingsRow(
                     title = "显示系统应用",
                     subtitle = if (prefs.showSystemApps) {
-                        "已显示无启动入口的系统进程（系统抽屉里看不到的那些）"
+                        "已显示系统抽屉里看不到的程序（系统跟踪、开关控制等无桌面入口的）"
                     } else {
-                        "浏览器 / 商店等可见系统应用始终列出；此处只控制无入口的系统进程"
+                        "默认与系统抽屉一致：只列出有桌面图标的程序；打开后才显示无入口的系统程序"
                     },
                     icon = Icons.Filled.Android,
                     onClick = { vm.setShowSystemApps(!prefs.showSystemApps) },
@@ -754,34 +754,76 @@ private fun PasswordPromptDialog(vm: DrawerViewModel, onDismiss: () -> Unit, onU
 @Composable
 private fun HiddenAppsDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
     val hidden = prefs.hiddenPackages.toList()
+    // 多选恢复：点行切换勾选，底部一次性恢复；单行右侧仍保留「恢复」快捷入口。
+    var selected by remember { mutableStateOf(emptySet<String>()) }
+    // 恢复后列表会变短，勾选集合里已不在隐藏列表的项自动失效。
+    val picked = selected.intersect(hidden.toSet())
     ThemedDialog(onDismissRequest = onDismiss) {
         Text("管理隐藏应用（${hidden.size}）", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "点击应用可多选，再点「恢复选中」一次性放回抽屉。",
+            color = DrawerColors.DialogSecondary,
+            fontSize = 12.sp,
+        )
         Spacer(Modifier.height(12.dp))
-        Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             if (hidden.isEmpty()) {
                 Text("暂无隐藏应用。长按应用图标可隐藏。", color = DrawerColors.DialogText)
             } else {
                 hidden.forEach { pkg ->
                     val label = vm.ui.value.apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
-                    ListItem(
-                        headlineContent = { Text(label, color = Color.White) },
-                        supportingContent = {
+                    val checked = pkg in picked
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = if (checked) picked - pkg else picked + pkg }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { selected = if (checked) picked - pkg else picked + pkg },
+                            colors = drawerCheckboxColors(),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(label, color = Color.White)
                             Text(
                                 pkg,
                                 style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
                                 color = DrawerColors.DialogSecondary,
                             )
-                        },
-                        trailingContent = {
-                            TextButton(onClick = { vm.toggleHidden(pkg) }) { Text("显示", color = DrawerColors.Accent) }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
+                        }
+                        TextButton(onClick = {
+                            vm.restoreHidden(listOf(pkg))
+                            selected = picked - pkg
+                        }) { Text("恢复", color = DrawerColors.Accent) }
+                    }
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (hidden.isNotEmpty()) {
+                TextButton(onClick = {
+                    selected = if (picked.size == hidden.size) emptySet() else hidden.toSet()
+                }) {
+                    Text(if (picked.size == hidden.size) "取消全选" else "全选", color = DrawerColors.DialogText)
+                }
+                TextButton(
+                    enabled = picked.isNotEmpty(),
+                    onClick = {
+                        vm.restoreHidden(picked)
+                        selected = emptySet()
+                    },
+                ) {
+                    Text(
+                        if (picked.isEmpty()) "恢复选中" else "恢复选中（${picked.size}）",
+                        color = if (picked.isEmpty()) DrawerColors.DialogSecondary else DrawerColors.Accent,
+                    )
+                }
+            }
+            Spacer(Modifier.weight(1f))
             TextButton(onClick = onDismiss) { Text("关闭", color = DrawerColors.DialogText) }
         }
     }

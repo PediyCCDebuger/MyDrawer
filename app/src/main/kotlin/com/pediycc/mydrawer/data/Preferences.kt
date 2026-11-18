@@ -164,6 +164,12 @@ class Preferences(context: Context) {
         update { p -> p.copy(hiddenPackages = p.hiddenPackages + packageNames) }
     }
 
+    /** 批量恢复：把多个包从隐藏集合里移除。 */
+    fun unhidePackages(packageNames: Collection<String>) {
+        if (packageNames.isEmpty()) return
+        update { p -> p.copy(hiddenPackages = p.hiddenPackages - packageNames) }
+    }
+
     fun overrideCategory(packageName: String, categoryId: String) {
         update { p -> p.copy(categoryOverrides = p.categoryOverrides + (packageName to categoryId)) }
     }

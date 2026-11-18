@@ -2,7 +2,13 @@ package com.pediycc.mydrawer.ui
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
 import android.net.Uri
+import android.os.Build
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pediycc.mydrawer.data.AppInfo
@@ -36,6 +42,11 @@ data class DrawerUiState(
     val selected: Set<String> = emptySet(),
     /** 系统使用统计（真实手机使用频率）；未授权时为空，回落到 app 内启动计数。 */
     val usageCounts: Map<String, Int> = emptyMap(),
+    /**
+     * 2.7.1 新增：进入嵌套子分类的返回栈。栈顶是上一级分类，
+     * 返回键优先出栈回到上级分类，栈空才退出抽屉。
+     */
+    val categoryTrail: List<String> = emptyList(),
 )
 
 class DrawerViewModel(app: Application) : AndroidViewModel(app) {
@@ -65,6 +76,8 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             _ui.value = _ui.value.copy(loading = true)
             val apps = repo.loadApps()
             val usage = UsageStatsHelper.load(context)
+            // 分类可能被删除/改名，返回栈里失效的入口要剔掉，否则返回键会退到空白视图。
+            val validIds = Categories.orderedFor(prefs.current).map { it.id }.toSet() + "all"
             _ui.value = _ui.value.copy(
                 apps = apps,
                 prefs = prefs.current,
@@ -72,6 +85,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current, apps),
                 selected = _ui.value.selected.intersect(apps.map { it.packageName }.toSet()),
                 usageCounts = usage,
+                categoryTrail = Categories.sanitizeTrail(_ui.value.categoryTrail, validIds),
             )
         }
     }
@@ -97,6 +111,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     fun firstCategory(p: UserPrefs = prefs.current): String =
         Categories.orderedFor(p).firstOrNull()?.id ?: "all"
 
+    /** 分类栏点选：清空嵌套返回栈，回到顶层视图。 */
     fun selectCategory(id: String) {
         prefs.update { it.copy(lastCategory = id) }
         _ui.value = _ui.value.copy(
@@ -104,7 +119,39 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             prefs = prefs.current,
             selectMode = false,
             selected = emptySet(),
+            categoryTrail = emptyList(),
         )
+    }
+
+    /**
+     * 从父分类内容里点进嵌套子分类：把当前分类压入返回栈，
+     * 这样返回键能退回上级分类，而不是直接退出抽屉。
+     */
+    fun openChildCategory(id: String) {
+        val cur = _ui.value.selectedCategory
+        _ui.value = _ui.value.copy(
+            selectedCategory = id,
+            selectMode = false,
+            selected = emptySet(),
+            categoryTrail = Categories.pushTrail(_ui.value.categoryTrail, cur, id),
+        )
+    }
+
+    /** 返回上一级分类；返回 false 表示已经在顶层，交给系统处理返回键。 */
+    fun backToParentCategory(): Boolean {
+        val (parent, trail) = Categories.popTrail(_ui.value.categoryTrail) ?: return false
+        _ui.value = _ui.value.copy(
+            selectedCategory = parent,
+            categoryTrail = trail,
+            selectMode = false,
+            selected = emptySet(),
+        )
+        // 回到顶层分类时同步「上次使用的分类」；嵌套子分类不写，避免下次启动停在没有入口的子分类里。
+        val topIds = Categories.topLevel(prefs.current).map { it.id }
+        if (parent == "all" || parent in topIds) {
+            prefs.update { it.copy(lastCategory = parent) }
+        }
+        return true
     }
 
     /** 设置「启动时进入的分类」：空字符串表示每次沿用上次分类。 */
@@ -141,6 +188,56 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.toggleHidden(packageName)
         refresh()
         notify("已更新隐藏应用")
+    }
+
+    /**
+     * 长按菜单「发送到桌面」：把应用作为固定快捷方式请求系统桌面创建。
+     * 用 ShortcutManager.requestPinShortcut（API 26+），图标与名称沿用当前抽屉里的显示；
+     * 桌面不支持固定快捷方式时给出提示，不静默失败。
+     */
+    fun pinToHome(packageName: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            notify("当前系统版本不支持发送到桌面")
+            return
+        }
+        val ctx = getApplication<Application>()
+        val sm = ctx.getSystemService(ShortcutManager::class.java)
+        if (sm == null || !sm.isRequestPinShortcutSupported) {
+            notify("当前桌面不支持固定快捷方式，无法发送到桌面")
+            return
+        }
+        val intent = repo.getLaunchIntent(packageName)
+        if (intent == null) {
+            notify("该应用没有可启动入口")
+            return
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val app = _ui.value.apps.firstOrNull { it.packageName == packageName }
+        val label = (app?.label ?: packageName).take(20)
+        val builder = ShortcutInfo.Builder(ctx, "mydrawer-pin-$packageName")
+            .setShortLabel(label)
+            .setIntent(intent)
+        // 优先用抽屉里当前显示的图标（含用户自定义图标），失败再退回应用自带图标。
+        val bitmapIcon = app?.icon?.let { d ->
+            runCatching { Icon.createWithBitmap(d.toBitmap(192, 192)) }.getOrNull()
+        }
+        if (bitmapIcon != null) {
+            builder.setIcon(bitmapIcon)
+        } else {
+            val res = runCatching { ctx.packageManager.getApplicationInfo(packageName, 0).icon }
+                .getOrDefault(0)
+            if (res != 0) builder.setIcon(Icon.createWithResource(packageName, res))
+        }
+        val ok = runCatching { sm.requestPinShortcut(builder.build(), null) }.getOrDefault(false)
+        notify(if (ok) "已发送到桌面，请在系统提示里确认添加" else "发送失败，桌面可能不支持该功能")
+    }
+
+    /** 管理隐藏应用：批量恢复（多选）选中的应用，重新出现在抽屉里。 */
+    fun restoreHidden(packageNames: Collection<String>) {
+        if (packageNames.isEmpty()) return
+        prefs.unhidePackages(packageNames)
+        refresh()
+        notify("已恢复 ${packageNames.size} 个应用")
     }
 
     // ---- 管理隐藏应用密码 ----
