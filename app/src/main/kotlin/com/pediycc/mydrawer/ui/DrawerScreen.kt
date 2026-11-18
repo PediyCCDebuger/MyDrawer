@@ -58,19 +58,64 @@ fun DrawerScreen(vm: DrawerViewModel) {
     }
 
     /**
-     * 长按菜单「卸载应用」（2.9.1 修复无效）：改用 Activity 上下文直接拉起系统卸载确认界面。
-     * 之前走 ViewModel 的 Application 上下文 + NEW_TASK，部分 ROM（MIUI/HyperOS 等）会静默拦截
-     * 非界面上下文发起的卸载器，表现为点击后毫无反应；Activity 上下文是前台调用方，不受该限制。
-     * Activity 路径失败再回落到 VM 的多级兜底（带异常信息提示，便于继续排查）。
+     * 长按菜单「卸载应用」（2.9.2 诊断版）：依次尝试 4 条路径，每条都记录结果，
+     * 最后把过程汇总到提示条——成功发出请求时会注明走的哪条路径；
+     * 全部失败则给出最后的异常类型与信息。这样在无法连电脑抓 logcat 的机器上
+     * （如一加13 / ColorOS 15，存在 OplusForbidUninstallAppManager 对部分内置应用
+     * 的禁卸保护，拦截时不抛异常、不弹窗），凭提示条文字即可定位问题环节。
      */
-    fun uninstallApp(packageName: String) {
-        val ok = runCatching {
-            context.startActivity(
-                android.content.Intent(android.content.Intent.ACTION_DELETE)
-                    .setData(android.net.Uri.parse("package:$packageName")),
-            )
-        }.isSuccess
-        if (!ok) vm.uninstall(packageName)
+    fun uninstallApp(app: AppInfo) {
+        val pkg = app.packageName
+        val uri = android.net.Uri.parse("package:$pkg")
+        val activityCtx = context
+        val appCtx = context.applicationContext
+        data class Attempt(val label: String, val run: () -> Unit)
+        val attempts = listOf(
+            Attempt("界面上下文 ACTION_DELETE") {
+                activityCtx.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_DELETE).setData(uri),
+                )
+            },
+            Attempt("显式系统卸载器 UninstallerActivity") {
+                activityCtx.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_DELETE)
+                        .setData(uri)
+                        .setClassName(
+                            "com.android.packageinstaller",
+                            "com.android.packageinstaller.UninstallerActivity",
+                        ),
+                )
+            },
+            Attempt("应用上下文 ACTION_DELETE") {
+                appCtx.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_DELETE)
+                        .setData(uri)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            },
+            @Suppress("DEPRECATION")
+            Attempt("应用上下文 ACTION_UNINSTALL_PACKAGE") {
+                appCtx.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_UNINSTALL_PACKAGE, uri)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            },
+        )
+        var lastError: String? = null
+        for (attempt in attempts) {
+            val result = runCatching { attempt.run() }
+            if (result.isSuccess) {
+                vm.notifyUser(
+                    "已通过【${attempt.label}】向系统发出「${app.label}」的卸载请求。" +
+                        "若没有出现系统卸载确认框，说明该应用被系统禁止卸载（ColorOS 对软件商店、" +
+                        "浏览器等内置应用有禁卸保护），可长按 →「属性」在系统详情页处理",
+                )
+                return
+            }
+            val e = result.exceptionOrNull()!!
+            lastError = e.javaClass.simpleName + (e.message?.let { "($it)" } ?: "")
+        }
+        vm.notifyUser("卸载界面启动失败：$lastError；可长按该应用 →「属性」在系统详情页卸载")
     }
 
     var showSettings by remember { mutableStateOf(false) }
@@ -294,7 +339,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onDismiss = { menuApp = null },
             onLaunch = { launchAndFinish(app.packageName); menuApp = null },
             onDetails = { openAppDetails(app.packageName); menuApp = null },
-            onUninstall = { uninstallApp(app.packageName); menuApp = null },
+            onUninstall = { uninstallApp(app); menuApp = null },
             onPinToHome = { vm.pinToHome(app.packageName); menuApp = null },
             onToggleHidden = { vm.toggleHidden(app.packageName); menuApp = null },
             onToggleCategory = { catId -> vm.toggleAppCategory(app.packageName, catId) },
