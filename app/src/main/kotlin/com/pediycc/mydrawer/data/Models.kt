@@ -51,13 +51,28 @@ object Categories {
 
     fun isValid(id: String): Boolean = labelById.containsKey(id) || id == FREQUENT
 
-    /** 按用户顺序返回分类；缺省 / 多余的 id 用默认顺序补齐。 */
+    /** 按用户顺序返回分类；缺省时「最常用」排最前，缺漏的分类补在后面。 */
     fun ordered(order: List<String>, frequentEnabled: Boolean): List<CategoryDef> {
-        val base = ALL.associateBy { it.id }.toMutableMap()
-        if (frequentEnabled) base[FREQUENT] = FREQUENT_DEF
+        val remaining = ALL.toMutableList()
         val out = mutableListOf<CategoryDef>()
-        for (id in order) base.remove(id)?.let { out += it }
-        out += base.values
+        val sequence: List<String> = when {
+            order.isEmpty() ->
+                if (frequentEnabled) listOf(FREQUENT) + ALL.map { it.id } else ALL.map { it.id }
+            // 用户调整过顺序：只有开启「最常用」时才保留它的位置，未记录则补到最前。
+            frequentEnabled -> if (FREQUENT in order) order else listOf(FREQUENT) + order
+            else -> order.filter { it != FREQUENT }
+        }
+        for (id in sequence) {
+            if (id == FREQUENT) {
+                if (frequentEnabled) out += FREQUENT_DEF
+            } else {
+                remaining.firstOrNull { it.id == id }?.let {
+                    out += it
+                    remaining.remove(it)
+                }
+            }
+        }
+        out += remaining
         return out
     }
 }

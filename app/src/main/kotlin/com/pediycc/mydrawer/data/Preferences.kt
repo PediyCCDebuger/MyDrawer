@@ -17,12 +17,15 @@ data class UserPrefs(
     // 2.0 新增：界面 / 展示
     val showCategoryLabels: Boolean = true,
     val showAppLabels: Boolean = true,
-    val transparentBackground: Boolean = true,
+    /** 2.3.0 起界面固定纯黑不透明，该字段仅为兼容旧备份保留，不再影响绘制。 */
+    val transparentBackground: Boolean = false,
     val leftHanded: Boolean = false,
     val stackFromBottom: Boolean = false,
     val showMenuButton: Boolean = true,
     val iconSizePercent: Int = 100,
     val frequentEnabled: Boolean = true,
+    /** 是否在分类栏显示「全部」入口。 */
+    val allEnabled: Boolean = true,
     // 2.0 新增：图标 / 名称覆盖与分类定制
     val categoryOrder: List<String> = emptyList(),
     val categoryLabels: Map<String, String> = emptyMap(),

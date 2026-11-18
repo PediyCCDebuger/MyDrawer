@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 全局不透明纯黑背景（2.3.0 起不再透壁纸） -->
+    <color name="mydrawer_window_background">#FF000000</color>
+    <color name="mydrawer_rail_background">#FF151515</color>
+</resources>

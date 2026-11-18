@@ -8,25 +8,25 @@ Smart Drawer（Smart Launcher Team，包名 `ginlemon.smartdrawer`）在 2021 �
 
 本项目是干净重写：逆向仅用于提取功能行为与数据（分类规则表），**未复制原版任何代码**，也不含商业授权、Google Analytics、应用内购买、广告、"在 Play 商店评分"等无关组件。
 
-**当前版本 2.2.0（`versionCode` 4）**。功能与界面按原版 Smart Drawer 1.0.3 重做，详见 [CHANGELOG.md](CHANGELOG.md)。
+**当前版本 2.3.0（`versionCode` 5）**。功能与界面按原版 Smart Drawer 1.0.3 重做，界面固定纯黑不透明底，详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 功能
 
 - **自动载入 + 自动分类**：首次启动读取全部应用，用随包内置的 2000 条包名规则自动归类（游戏 / 上网 / 影音 / 通讯 / 工具 / 设置 / 其他）。
-- **纵列分类抽屉（仿原版）**：左侧竖排分类图标栏，分类文字、应用文字、半透明背景均可设置；支持左手模式（分类栏放右侧）。透明背景会透出系统壁纸，分类栏沿用原版白色磨砂。
+- **纵列分类抽屉（仿原版）**：左侧竖排分类图标栏（略浅于纯黑的深色底），分类图标为彩色，分类文字、应用文字可设置；支持左手模式（分类栏放右侧）。「全部」与「最常用」两个入口都可在设置里单独关闭，「最常用」默认排在分类栏最前。
 - **多选批量移动**：跨分类勾选多个应用，一键移动到目标分类。
 - **深度定制**：长按应用可重命名 / 换图标（内置矢量图库 / 本机图库 / 应用原图标）；长按分类可重命名 / 换图标 / 排序 / 上下移动，分类内支持按名称 / 安装时间 / 使用频率 / 手动排序。
 - **最常用分类**：按实际启动次数自动排前 10，可在设置里开关。
 - **搜索**：按应用名或包名实时过滤。
 - **隐藏应用**：长按图标隐藏，设置里可显示系统应用。
 - **配置备份**：右上角软盘图标 = 导出，时钟图标 = 导入；开放 JSON 备份（分类覆盖、隐藏列表、排序、图标、外观），v1 旧备份仍可导入。
-- **自动更新**：默认直连检测 GitHub Release，可选公共反向代理（gh-proxy.org / gh-proxy.com / ghfast.top / gh.acmsz.top / github.chenc.dev / gh.monlor.com）下载升级；不含本机代理。
+- **自动更新**：默认直连检测 GitHub Release（按版本号比较，不会把同版本误判为更新），可选公共反向代理（gh-proxy.org / gh-proxy.com / ghfast.top / gh.acmsz.top / github.chenc.dev / gh.monlor.com）下载升级；下载后校验安装包，缺「安装未知应用」授权会引导到系统设置；不含本机代理。
 
 ## 技术
 
 - Kotlin + Jetpack Compose（Material 3），minSdk 26 / targetSdk 37
 - `QUERY_ALL_PACKAGES` 读取全部应用；SAF 导出/导入备份，适配分区存储
-- 仅申请 `QUERY_ALL_PACKAGES` 与 `INTERNET`（自动更新用），不申请废弃/危险权限
+- 仅申请 `QUERY_ALL_PACKAGES`、`INTERNET`（自动更新）与 `REQUEST_INSTALL_PACKAGES`（拉起系统安装器），不申请危险权限
 - GitHub Actions 打 `vX.Y.Z` 标签触发 Release，产出 universal / arm64-v8a / armeabi-v7a 三个 APK + SHA256SUMS
 
 ## 与上游的关系

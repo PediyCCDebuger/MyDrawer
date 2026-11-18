@@ -238,7 +238,7 @@ fun IconPickerSheet(
                                 },
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                Icon(entry.vector, entry.label, tint = Color.White, modifier = Modifier.size(34.dp))
+                                Icon(entry.vector, entry.label, tint = entry.color, modifier = Modifier.size(34.dp))
                                 Text(entry.label, color = Color(0xFFB9C0C8), fontSize = 10.sp, maxLines = 1)
                             }
                         }
@@ -295,46 +295,72 @@ fun IconPickerSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
+    val currentVersion = BuildConfig.VERSION_NAME
     var info by remember { mutableStateOf<Updater.ReleaseInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(true) }
     var proxyExpanded by remember { mutableStateOf(false) }
-    val prefs by vm.ui.collectAsState()
-    LaunchedEffect(Unit) {
+    var downloading by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val state by vm.ui.collectAsState()
+
+    fun check() {
+        checking = true
+        error = null
         vm.checkUpdate { release, err ->
             info = release
             error = err
             checking = false
         }
     }
+
+    LaunchedEffect(Unit) { check() }
+
+    // 只有远端版本确实更大才算「发现新版本」；相同版本显示已是最新。
+    val newVersion = info?.takeIf { Updater.isNewer(it.tag, currentVersion) }
+
     ThemedDialog(onDismissRequest = onDismiss) {
         Text("检查更新", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
-        Text("当前版本 ${BuildConfig.VERSION_NAME}", color = DrawerColors.DialogText)
+        Text("当前版本 $currentVersion", color = DrawerColors.DialogText)
         Spacer(Modifier.height(8.dp))
         when {
             checking -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(20.dp), color = DrawerColors.Accent)
                 Spacer(Modifier.width(8.dp)); Text("正在检查…", color = DrawerColors.DialogText)
             }
-            info != null -> {
-                Text("发现新版本：${info!!.tag}", color = DrawerColors.DialogText)
+            newVersion != null -> {
+                Text("发现新版本：${newVersion.tag}", color = Color(0xFF9BE29F))
                 Text(
-                    info!!.body.take(300).ifBlank { "暂无更新说明" },
+                    newVersion.body.take(300).ifBlank { "暂无更新说明" },
                     fontSize = 12.sp,
                     color = DrawerColors.DialogSecondary,
-                    modifier = Modifier.padding(top = 8.dp).heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
+                    modifier = Modifier.padding(top = 8.dp).heightIn(max = 160.dp).verticalScroll(rememberScrollState()),
                 )
             }
-            else -> Text(error ?: "暂未发现更新", color = DrawerColors.DialogText)
+            info != null -> Text("已是最新版本（$currentVersion）", color = DrawerColors.DialogText)
+            else -> Text(error ?: "检查更新失败，可更换代理后重试", color = DrawerColors.DialogText)
         }
+
+        if (downloading) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(18.dp), color = DrawerColors.Accent, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("正在下载安装包…", color = DrawerColors.DialogText, fontSize = 13.sp)
+            }
+        }
+        result?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = Color(0xFFFFE082), fontSize = 13.sp)
+        }
+
         Spacer(Modifier.height(8.dp))
-        Text("下载代理：${prefs.prefs.updateProxy}", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+        Text("下载代理：${state.prefs.updateProxy}", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
         TextButton(onClick = { proxyExpanded = !proxyExpanded }) {
             Text(if (proxyExpanded) "收起代理列表" else "更换代理", color = DrawerColors.Accent)
         }
         // 不用 DropdownMenu：弹出层会套用系统浅色主题导致白底白字。
-        // 直接在对话框内展开列表，保持与原版深色对话框一致。
         if (proxyExpanded) {
             Column(Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())) {
                 Updater.PROXIES.forEach { p ->
@@ -344,15 +370,20 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
                             .clickable {
                                 vm.updatePrefs { it.copy(updateProxy = p) }
                                 proxyExpanded = false
-                                checking = true
-                                vm.checkUpdate { release, err ->
-                                    info = release; error = err; checking = false
-                                }
+                                result = null
+                                check()
                             }
                             .padding(vertical = 8.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = p == prefs.prefs.updateProxy, onClick = {})
+                        RadioButton(
+                            selected = p == state.prefs.updateProxy,
+                            onClick = {},
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = DrawerColors.Accent,
+                                unselectedColor = Color(0xFFBDBDBD),
+                            ),
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text(p, color = Color.White, fontSize = 12.sp)
                     }
@@ -362,9 +393,16 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onDismiss) { Text("关闭", color = DrawerColors.DialogText) }
-            if (info != null) {
+            if (newVersion != null && !downloading) {
                 Spacer(Modifier.width(8.dp))
-                TextButton(onClick = { vm.downloadAndInstall(info!!); onDismiss() }) {
+                TextButton(onClick = {
+                    downloading = true
+                    result = null
+                    vm.downloadAndInstall(newVersion) { msg ->
+                        downloading = false
+                        result = msg
+                    }
+                }) {
                     Text("下载并安装", color = DrawerColors.Accent)
                 }
             }

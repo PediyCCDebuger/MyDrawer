@@ -27,10 +27,6 @@ import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 
-/** 透明背景时只铺一层极淡的暗幕压住壁纸高光，仍可清楚透出壁纸；不透明时用深色实底。 */
-private fun scrimColorOf(transparent: Boolean): Color =
-    if (transparent) DrawerColors.ScrimOverWallpaper else Color(0xFF101217)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrawerScreen(vm: DrawerViewModel) {
@@ -64,11 +60,10 @@ fun DrawerScreen(vm: DrawerViewModel) {
         }
     }
 
-    val scrimColor = scrimColorOf(state.prefs.transparentBackground)
-
-    Box(Modifier.fillMaxSize().background(scrimColor)) {
+    // 2.3.0：固定纯黑不透明背景，不再透壁纸（透壁纸会导致滚动时整片重影）。
+    Box(Modifier.fillMaxSize().background(DrawerColors.AppBackground)) {
         Scaffold(
-            containerColor = Color.Transparent,
+            containerColor = DrawerColors.AppBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
@@ -306,39 +301,52 @@ private fun CategoryRail(
     onSelect: (String) -> Unit,
     onLongClick: (String) -> Unit,
 ) {
+    // 分类栏只比纯黑略浅一档：既能和内容区区分，又不会像白底那样压住白色分类文字。
     Column(
         Modifier
             .fillMaxHeight()
             .width(if (prefs.showCategoryLabels) 76.dp else 58.dp)
-            // 原版 catlist_bg = #20FFFFFF（白色 12.5% 磨砂），比黑底更透、更接近原版
-            .background(Color(0x20FFFFFF))
+            .background(DrawerColors.RailBackground)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(6.dp))
-        // 「全部」入口
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = { onSelect("all") }, onLongClick = {}),
-        ) {
-            Box(
-                Modifier
-                    .size(48.dp)
-                    .background(
-                        if (selected == "all") Color(0x44FFFFFF) else Color.Transparent,
-                        MaterialTheme.shapes.small,
-                    ),
-                contentAlignment = Alignment.Center,
+        // 「全部」入口，可在设置里关闭
+        if (prefs.allEnabled) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(onClick = { onSelect("all") }, onLongClick = {}),
             ) {
-                Icon(Icons.Filled.Apps, "全部", tint = Color.White, modifier = Modifier.size(26.dp))
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .background(
+                            if (selected == "all") DrawerColors.RailSelected else Color.Transparent,
+                            MaterialTheme.shapes.small,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Apps,
+                        "全部",
+                        tint = DrawerColors.AllIcon,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+                if (prefs.showCategoryLabels) {
+                    Text(
+                        "全部",
+                        color = if (selected == "all") Color.White else Color(0xFFE0E0E0),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        style = WallpaperTextShadowStyle,
+                    )
+                }
             }
-            if (prefs.showCategoryLabels) {
-                Text("全部", color = Color.White, fontSize = 11.sp, maxLines = 1, style = WallpaperTextShadowStyle)
-            }
+            Spacer(Modifier.height(4.dp))
         }
-        Spacer(Modifier.height(4.dp))
         categories.forEach { cat ->
             val catSelected = selected == cat.id
             Column(
@@ -351,22 +359,24 @@ private fun CategoryRail(
                     Modifier
                         .size(48.dp)
                         .background(
-                            if (catSelected) Color(0x44FFFFFF) else Color.Transparent,
+                            if (catSelected) DrawerColors.RailSelected else Color.Transparent,
                             MaterialTheme.shapes.small,
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
+                    // 内置图标按图库配色显示为彩色；自定义图片 / 指定应用图标原样显示。
                     DrawerIcon(
                         key = vm.categoryIconKey(cat.id),
-                        fallbackVector = BuiltInIcons.find(cat.iconKey)?.vector ?: Icons.Filled.Apps,
+                        fallbackVector = BuiltInIcons.vectorOf(cat.iconKey),
                         size = 28.dp,
                         contentDescription = cat.label,
+                        colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(cat.id)),
                     )
                 }
                 if (prefs.showCategoryLabels) {
                     Text(
                         vm.categoryLabel(cat.id),
-                        color = Color.White,
+                        color = if (catSelected) Color.White else Color(0xFFE0E0E0),
                         fontSize = 11.sp,
                         maxLines = 1,
                         textAlign = TextAlign.Center,
@@ -401,7 +411,7 @@ private fun AppGrid(
                     style = WallpaperTextShadowStyle,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0x22000000))
+                        .background(DrawerColors.GroupHeader)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }

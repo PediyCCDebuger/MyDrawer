@@ -54,10 +54,21 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 apps = apps,
                 prefs = prefs.current,
                 loading = false,
+                selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
                 selected = _ui.value.selected.intersect(apps.map { it.packageName }.toSet()),
             )
         }
     }
+
+    /** 关闭「全部」/「最常用」后，停在已隐藏入口上的选中项要回落到第一个可用分类。 */
+    private fun fallbackCategory(current: String, p: UserPrefs): String {
+        if (current == "all") return if (p.allEnabled) "all" else firstCategory(p)
+        if (current == Categories.FREQUENT && !p.frequentEnabled) return firstCategory(p)
+        return current
+    }
+
+    fun firstCategory(p: UserPrefs = prefs.current): String =
+        Categories.ordered(p.categoryOrder, p.frequentEnabled).firstOrNull()?.id ?: "all"
 
     fun selectCategory(id: String) {
         _ui.value = _ui.value.copy(selectedCategory = id, selectMode = false, selected = emptySet())
@@ -223,6 +234,24 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
+    /** 分类栏「全部」入口开关；关闭时若正停在「全部」，自动落到第一个分类。 */
+    fun setAllEnabled(on: Boolean) {
+        prefs.update { it.copy(allEnabled = on) }
+        _ui.value = _ui.value.copy(
+            prefs = prefs.current,
+            selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
+        )
+    }
+
+    /** 「最常用」分类开关；关闭时若正停在该分类，自动落到第一个分类。 */
+    fun setFrequentEnabled(on: Boolean) {
+        prefs.update { it.copy(frequentEnabled = on) }
+        _ui.value = _ui.value.copy(
+            prefs = prefs.current,
+            selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
+        )
+    }
+
     fun updatePrefs(transform: (UserPrefs) -> UserPrefs) {
         prefs.update(transform)
         _ui.value = _ui.value.copy(prefs = prefs.current)
@@ -264,14 +293,47 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun downloadAndInstall(info: Updater.ReleaseInfo) {
+    fun downloadAndInstall(info: Updater.ReleaseInfo, onDone: (String) -> Unit = {}) {
         viewModelScope.launch {
-            notify("开始下载 ${info.tag}…")
-            val file = Updater.download(context, info, prefs.current.updateProxy)
-            if (file == null) notify("下载失败，可更换代理后重试")
-            else {
-                Updater.install(context, file)
-                notify("下载完成，请确认安装")
+            val ctx = getApplication<Application>()
+            // 先确认有「安装未知应用」授权，避免下载几十兆后才发现装不上。
+            if (!Updater.canInstall(ctx)) {
+                Updater.openInstallPermission(ctx)
+                val msg = "请先允许「安装未知应用」，返回后再点一次下载并安装"
+                notify(msg)
+                onDone(msg)
+                return@launch
+            }
+            when (val result = Updater.download(ctx, info, prefs.current.updateProxy)) {
+                is Updater.DownloadResult.Fail -> {
+                    notify(result.reason)
+                    onDone(result.reason)
+                }
+                is Updater.DownloadResult.Ok -> {
+                    // 下载完成再拉起系统安装器；缺「安装未知应用」授权时先跳设置页。
+                    when (Updater.install(ctx, result.file)) {
+                        Updater.InstallResult.STARTED -> {
+                            val msg = "下载完成，请在系统安装界面确认安装"
+                            notify(msg)
+                            onDone(msg)
+                        }
+                        Updater.InstallResult.NEED_PERMISSION -> {
+                            val ok = Updater.openInstallPermission(ctx)
+                            val msg = if (ok) {
+                                "请先允许「安装未知应用」，返回后再点一次下载并安装"
+                            } else {
+                                "缺少安装权限，请在系统设置中允许本应用安装应用"
+                            }
+                            notify(msg)
+                            onDone(msg)
+                        }
+                        Updater.InstallResult.FAILED -> {
+                            val msg = "无法拉起安装程序，请更换代理重新下载"
+                            notify(msg)
+                            onDone(msg)
+                        }
+                    }
+                }
             }
         }
     }
@@ -300,7 +362,11 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                     (s.selectedCategory == Categories.FREQUENT && (s.prefs.launchCounts[it.packageName] ?: 0) > 0)
             }
         }
-        return Sorter.groupEx(apps, s.prefs)
+        // 「最常用」只是分类栏里的独立入口；「全部」和各分类内部不再追加一段最常用，
+        // 否则同一批应用会在列表底部重复出现。
+        return Sorter.groupEx(apps, s.prefs).filter { (id, _) ->
+            id != Categories.FREQUENT || s.selectedCategory == Categories.FREQUENT
+        }
     }
 
     fun categoryCount(categoryId: String): Int {

@@ -84,6 +84,31 @@ class SorterTest {
         assertEquals(setOf("x"), parsed.prefs.hiddenPackages)
         assertEquals(5, parsed.prefs.gridColumns)
         assertEquals(true, parsed.prefs.frequentEnabled)
+        assertEquals(true, parsed.prefs.allEnabled)
         assertEquals(Updater.PROXY_DIRECT, parsed.prefs.updateProxy)
+    }
+
+    @Test
+    fun `same version is not an update`() {
+        assertEquals(false, Updater.isNewer("v2.3.0", "2.3.0"))
+        assertEquals(false, Updater.isNewer("2.3.0", "v2.3.0"))
+    }
+
+    @Test
+    fun `higher version is an update`() {
+        assertEquals(true, Updater.isNewer("v2.3.1", "2.3.0"))
+        assertEquals(true, Updater.isNewer("v2.4.0", "2.3.9"))
+        assertEquals(true, Updater.isNewer("v3.0", "2.9.9"))
+        assertEquals(false, Updater.isNewer("v2.2.0", "2.3.0"))
+    }
+
+    @Test
+    fun `frequent category is first by default and can be turned off`() {
+        assertEquals(Categories.FREQUENT, Categories.ordered(emptyList(), true).first().id)
+        assertEquals("games", Categories.ordered(emptyList(), false).first().id)
+        assertEquals(
+            false,
+            Categories.ordered(emptyList(), false).any { it.id == Categories.FREQUENT },
+        )
     }
 }

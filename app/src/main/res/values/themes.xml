@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 对齐原版 Theme.MyTheme（parent=Theme.Holo.Wallpaper.NoTitleBar）：
-         仅把窗口背景设成透明还不够，必须开启 windowShowWallpaper，
-         系统才会在窗口后面绘制壁纸。PrefMain 设置页也继承这一主题。 -->
-    <style name="Theme.MyDrawer" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- 2.3.0 起不再透壁纸：原版那种「窗口透壁纸 + 滚动」在 Compose 上会出现整片重影，
+         因此改成不透明纯黑背景。状态栏 / 导航栏一并黑底，避免上下出现亮条。 -->
+    <style name="Theme.MyDrawer" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/mydrawer_window_background</item>
+        <item name="android:colorBackground">@color/mydrawer_window_background</item>
+        <item name="android:statusBarColor">@color/mydrawer_window_background</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">@null</item>
-        <item name="android:windowShowWallpaper">true</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/mydrawer_window_background</item>
+        <item name="android:navigationBarDividerColor">@color/mydrawer_window_background</item>
+        <item name="android:windowShowWallpaper">false</item>
     </style>
 </resources>

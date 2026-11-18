@@ -3,7 +3,10 @@ package com.pediycc.mydrawer.data
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -28,6 +31,24 @@ object Updater {
 
     data class ReleaseInfo(val tag: String, val apkUrl: String, val apkName: String, val body: String)
 
+    /** 下载结果：成功给出文件，失败给出可展示的中文原因。 */
+    sealed interface DownloadResult {
+        data class Ok(val file: File) : DownloadResult
+        data class Fail(val reason: String) : DownloadResult
+    }
+
+    /** 拉起安装器的结果。 */
+    enum class InstallResult {
+        /** 系统安装界面已成功拉起。 */
+        STARTED,
+
+        /** 缺少「安装未知应用」授权，需要先跳到系统设置。 */
+        NEED_PERMISSION,
+
+        /** 文件无效 / 无法拉起安装器。 */
+        FAILED,
+    }
+
     /** 第一项为直连，其后为可选公共反向代理。 */
     val PROXIES = listOf(
         PROXY_DIRECT,
@@ -39,11 +60,31 @@ object Updater {
         "gh.monlor.com",
     )
 
-    /** 去掉可能的前导 v / V，便于版本比较。 */
+    /** 去掉可能的前导 v / V，便于版本比较与展示。 */
     fun normalize(tag: String): String = tag.trim().removePrefix("v").removePrefix("V")
 
-    /** 远端 tag 是否与当前版本不同（即存在更新）。 */
-    fun isNewer(tag: String, current: String): Boolean = normalize(tag) != normalize(current)
+    /** 把 2.3.0 / v2.3.0-beta 之类拆成数字段，非数字段按 0 处理。 */
+    private fun versionParts(version: String): List<Int> =
+        normalize(version)
+            .split('.', '-', '_', '+')
+            .map { part -> part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0 }
+
+    /**
+     * 远端 tag 是否比当前版本新。
+     *
+     * 之前用「字符串不相等」判断，导致远端 2.2.0 与本地 2.2.0 也被当成「发现新版本」。
+     * 现在按数字段逐位比较，只有远端更大才算更新。
+     */
+    fun isNewer(tag: String, current: String): Boolean {
+        val remote = versionParts(tag)
+        val local = versionParts(current)
+        for (i in 0 until maxOf(remote.size, local.size)) {
+            val r = remote.getOrElse(i) { 0 }
+            val l = local.getOrElse(i) { 0 }
+            if (r != l) return r > l
+        }
+        return false
+    }
 
     /**
      * 拼代理地址。只有明确在 [PROXIES] 里的公共代理才加前缀；
@@ -57,6 +98,7 @@ object Updater {
         val conn = URL(proxied(url, proxy)).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         conn.setRequestProperty("User-Agent", "MyDrawer")
+        conn.instanceFollowRedirects = true
         conn.connectTimeout = 15000
         conn.readTimeout = readTimeout
         return conn
@@ -81,7 +123,7 @@ object Updater {
             for (i in 0 until assets.length()) {
                 val a = assets.getJSONObject(i)
                 val name = a.optString("name", "")
-                if (name.contains("universal") && name.endsWith(".apk", ignoreCase = true)) {
+                if (name.contains("universal", ignoreCase = true) && name.endsWith(".apk", ignoreCase = true)) {
                     apkUrl = a.optString("browser_download_url", "")
                     apkName = name
                     break
@@ -104,35 +146,109 @@ object Updater {
         }
     }
 
-    suspend fun download(context: Context, info: ReleaseInfo, proxy: String): File? =
+    suspend fun download(context: Context, info: ReleaseInfo, proxy: String): DownloadResult =
         withContext(Dispatchers.IO) {
+            var out: File? = null
             try {
                 val dir = File(context.cacheDir, "update")
                 dir.mkdirs()
-                val out = File(dir, if (info.apkName.isBlank()) "MyDrawer-update.apk" else info.apkName)
-                val conn = connect(info.apkUrl, proxy, 60000)
-                if (conn.responseCode != HttpURLConnection.HTTP_OK) {
+                // 清掉上一次的残留，避免把旧包当成本次下载结果。
+                dir.listFiles()?.forEach { if (it.isFile && it.extension == "apk") it.delete() }
+                out = File(dir, if (info.apkName.isBlank()) "MyDrawer-update.apk" else info.apkName)
+                val conn = connect(info.apkUrl, proxy, 120000)
+                try {
+                    if (conn.responseCode != HttpURLConnection.HTTP_OK) {
+                        return@withContext DownloadResult.Fail("下载失败（HTTP ${conn.responseCode}），可更换代理后重试")
+                    }
+                    val total = conn.contentLengthLong
+                    conn.inputStream.use { input ->
+                        FileOutputStream(out).use { fos -> input.copyTo(fos, 64 * 1024) }
+                    }
+                    if (total > 0 && out.length() != total) {
+                        out.delete()
+                        return@withContext DownloadResult.Fail("下载不完整，请重试")
+                    }
+                } finally {
                     conn.disconnect()
-                    return@withContext null
                 }
-                conn.inputStream.use { input -> FileOutputStream(out).use { it.write(input.readBytes()) } }
-                conn.disconnect()
-                if (out.length() > 0) out else null
+                if (out.length() <= 0) {
+                    out.delete()
+                    return@withContext DownloadResult.Fail("下载内容为空，可更换代理后重试")
+                }
+                // 代理出错时常见返回 200 + HTML 错误页，直接交给安装器只会静默失败，
+                // 所以先校验是不是一个包名、版本都正确的 APK。
+                val reason = invalidReason(context, out)
+                if (reason != null) {
+                    out.delete()
+                    return@withContext DownloadResult.Fail(reason)
+                }
+                DownloadResult.Ok(out)
             } catch (e: Exception) {
-                null
+                runCatching { out?.delete() }
+                DownloadResult.Fail("下载出错：${e.message ?: "网络异常"}")
             }
         }
 
-    fun install(context: Context, file: File) {
-        try {
-            val uri: Uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+    /** 返回 null 表示文件是有效且可升级的 APK；否则返回中文原因。 */
+    private fun invalidReason(context: Context, file: File): String? {
+        val header = ByteArray(4)
+        val read = runCatching {
+            file.inputStream().use { it.read(header) }
+        }.getOrDefault(0)
+        // ZIP 魔数 PK\x03\x04；HTML 错误页 / 代理提示页会在这里被挡住。
+        if (read < 4 || header[0] != 0x50.toByte() || header[1] != 0x4B.toByte()) {
+            return "下载到的不是安装包（代理可能返回了错误页），请更换代理重试"
+        }
+        val archive = runCatching {
+            context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+        }.getOrNull() ?: return "安装包解析失败，请更换代理重新下载"
+        if (archive.packageName != context.packageName) {
+            return "下载到的安装包不属于本应用，已取消安装"
+        }
+        val newCode = PackageInfoCompat.getLongVersionCode(archive)
+        val currentCode = runCatching {
+            PackageInfoCompat.getLongVersionCode(
+                context.packageManager.getPackageInfo(context.packageName, 0),
+            )
+        }.getOrDefault(0L)
+        if (newCode <= currentCode) return "下载到的版本不比当前版本新，已取消安装"
+        return null
+    }
+
+    fun canInstall(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else true
+
+    /** 跳到「安装未知应用」授权页；返回是否成功拉起。 */
+    fun openInstallPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching { context.startActivity(intent) }.isSuccess
+    }
+
+    fun install(context: Context, file: File): InstallResult {
+        if (!canInstall(context)) return InstallResult.NEED_PERMISSION
+        return try {
+            val uri: Uri = FileProvider.getUriForFile(
+                context,
+                context.packageName + ".fileprovider",
+                file,
+            )
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                // 个别 ROM 的安装器只认 ClipData 里的授权。
+                clipData = android.content.ClipData.newRawUri("apk", uri)
             }
             context.startActivity(intent)
+            InstallResult.STARTED
         } catch (e: Exception) {
+            InstallResult.FAILED
         }
     }
 }

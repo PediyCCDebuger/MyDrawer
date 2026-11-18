@@ -8,6 +8,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -45,10 +46,11 @@ fun DrawerIcon(
                     imageVector = entry.vector,
                     contentDescription = contentDescription ?: entry.label,
                     modifier = Modifier.size(size),
-                    tint = colorTint ?: androidx.compose.ui.graphics.Color.Unspecified,
+                    // 默认用图库自带彩色，黑底上不再是灰白一片。
+                    tint = colorTint ?: entry.color,
                 )
             } else {
-                Icon(fallbackVector, contentDescription, Modifier.size(size))
+                Icon(fallbackVector, contentDescription, Modifier.size(size), tint = Color(0xFFB0BEC5))
             }
         }
         key != null && key.startsWith("file:") -> {
@@ -89,7 +91,7 @@ fun DrawerIcon(
                 modifier = Modifier.size(size),
             )
         }
-        else -> Icon(fallbackVector, contentDescription, Modifier.size(size))
+        else -> Icon(fallbackVector, contentDescription, Modifier.size(size), tint = Color(0xFFB0BEC5))
     }
 }
 

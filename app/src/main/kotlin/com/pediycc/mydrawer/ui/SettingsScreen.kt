@@ -45,8 +45,8 @@ private fun drawerSliderColors() = SliderDefaults.colors(
 )
 
 /**
- * 设置页对齐原版：PrefMain 继承 application 的 Theme.MyTheme（Holo.Wallpaper），
- * 因此整个页面透出壁纸，列表行是半透明暗底 + 白字 + 细分隔线。
+ * 设置页：2.3.0 起固定纯黑不透明底（不再透出抽屉内容，避免看不清），
+ * 列表行比背景略浅一点做区分，文字统一白字，视觉与原版深色设置页一致。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,16 +62,16 @@ fun SettingsScreen(
     var pinDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = DrawerColors.AppBackground,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
+                    containerColor = DrawerColors.AppBackground,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White,
                     actionIconContentColor = Color.White,
                 ),
-                title = { Text("设置", style = WallpaperTextShadowStyle) },
+                title = { Text("设置") },
                 navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Filled.ArrowBack, "返回") } },
             )
         },
@@ -80,7 +80,7 @@ fun SettingsScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0x33000000)),
+                .background(DrawerColors.AppBackground),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             // ---- 应用网格（原 pref_drawer / App grid） ----
@@ -209,20 +209,20 @@ fun SettingsScreen(
             }
             item {
                 SwitchRow(
-                    title = "透明背景",
-                    subtitle = "抽屉背景半透明，可透出壁纸",
-                    icon = Icons.Filled.Wallpaper,
-                    checked = prefs.transparentBackground,
-                    onCheckedChange = { v -> vm.updatePrefs { it.copy(transparentBackground = v) } },
+                    title = "显示「全部」分类",
+                    subtitle = "在分类栏顶部显示「全部」入口，关闭后只看各分类",
+                    icon = Icons.Filled.Apps,
+                    checked = prefs.allEnabled,
+                    onCheckedChange = { v -> vm.setAllEnabled(v) },
                 )
             }
             item {
                 SwitchRow(
-                    title = "常用应用分类",
-                    subtitle = "按使用频率自动排列最常用的 10 个应用（原版：Promoted apps）",
+                    title = "最常用分类",
+                    subtitle = "按使用频率自动排列最常用的 10 个应用，默认排在分类栏最前",
                     icon = Icons.Filled.Star,
                     checked = prefs.frequentEnabled,
-                    onCheckedChange = { v -> vm.updatePrefs { it.copy(frequentEnabled = v) } },
+                    onCheckedChange = { v -> vm.setFrequentEnabled(v) },
                 )
             }
             item {
@@ -315,11 +315,11 @@ private fun SectionTitle(text: String) {
     Text(
         text,
         fontWeight = FontWeight.Bold,
-        color = Color.White,
+        color = DrawerColors.Accent,
         style = WallpaperTextShadowStyle,
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0x33000000))
+            .background(DrawerColors.SettingsHeader)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     )
 }
@@ -332,23 +332,23 @@ private fun SettingsRow(
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    Box(Modifier.fillMaxWidth().background(Color(0x33000000))) {
+    Box(Modifier.fillMaxWidth().background(DrawerColors.SettingsRow)) {
         ListItem(
             headlineContent = { Text(title, color = Color.White, style = WallpaperTextShadowStyle) },
             supportingContent = {
                 Text(
                     subtitle,
                     style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
-                    color = Color(0xDDFFFFFF),
+                    color = Color(0xFFBDBDBD),
                 )
             },
-            leadingContent = { Icon(icon, null, tint = Color(0xFFE8EEF7)) },
+            leadingContent = { Icon(icon, null, tint = Color(0xFF8FB4FF)) },
             trailingContent = trailing,
             modifier = Modifier.clickable(onClick = onClick),
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
     }
-    HorizontalDivider(color = Color(0x3FFFFFFF))
+    HorizontalDivider(color = DrawerColors.SettingsDivider)
 }
 
 @Composable
@@ -360,24 +360,24 @@ private fun SwitchRow(
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().background(Color(0x33000000))) {
+    Box(Modifier.fillMaxWidth().background(DrawerColors.SettingsRow)) {
         ListItem(
             headlineContent = { Text(title, color = Color.White, style = WallpaperTextShadowStyle) },
             supportingContent = {
                 Text(
                     subtitle,
                     style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
-                    color = Color(0xDDFFFFFF),
+                    color = Color(0xFFBDBDBD),
                 )
             },
-            leadingContent = { Icon(icon, null, tint = Color(0xFFE8EEF7)) },
+            leadingContent = { Icon(icon, null, tint = Color(0xFF8FB4FF)) },
             trailingContent = {
                 Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange, colors = drawerSwitchColors())
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
     }
-    HorizontalDivider(color = Color(0x3FFFFFFF))
+    HorizontalDivider(color = DrawerColors.SettingsDivider)
 }
 
 @Composable
@@ -390,16 +390,16 @@ private fun StepperRow(
     suffix: String,
     onValue: (Int) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().background(Color(0x33000000)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().background(DrawerColors.SettingsRow).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.PhotoSizeSelectSmall, null, tint = Color(0xFFE8EEF7))
+            Icon(Icons.Filled.PhotoSizeSelectSmall, null, tint = Color(0xFF8FB4FF))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, color = Color.White, style = WallpaperTextShadowStyle)
                 Text(
                     subtitle,
                     style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
-                    color = Color(0xDDFFFFFF),
+                    color = Color(0xFFBDBDBD),
                 )
             }
             Text("$value$suffix", color = Color.White)
@@ -412,7 +412,7 @@ private fun StepperRow(
             colors = drawerSliderColors(),
         )
     }
-    HorizontalDivider(color = Color(0x3FFFFFFF))
+    HorizontalDivider(color = DrawerColors.SettingsDivider)
 }
 
 /** 用深色对话框代替 DropdownMenu，避免弹出层套用系统浅色主题造成白底白字。 */

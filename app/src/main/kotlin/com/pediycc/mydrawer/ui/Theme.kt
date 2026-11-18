@@ -3,7 +3,6 @@ package com.pediycc.mydrawer.ui
 import android.app.Activity
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
-import android.view.WindowManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -14,21 +13,20 @@ import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 /**
- * 抽屉和设置页的文字都直接叠在壁纸上。
- * 原版 drawer.xml 的标题/标签为 #FFFFFFFF，靠黑色投影在任意壁纸上保持可读。
+ * 应用文字阴影：黑底上仍保留一层轻微投影，贴在彩色图标下时更清楚。
+ * 对应原版 drawer.xml 的白色文字 + 阴影写法。
  */
 val WallpaperTextShadowStyle = TextStyle(
     shadow = Shadow(
@@ -38,55 +36,60 @@ val WallpaperTextShadowStyle = TextStyle(
     ),
 )
 
-/** 与原版 mtrl_dark_dialog_bg（深色圆角对话框）保持一致的统一配色。 */
+/** 2.3.0 统一配色：全局纯黑背景，分类栏略浅一档区分，弹窗深灰圆角。 */
 object DrawerColors {
-    val DialogContainer = Color(0xFF303034)
+    /** 主界面 / 设置页背景：纯黑，不透明。 */
+    val AppBackground = Color(0xFF000000)
+
+    /** 左侧分类栏：只比黑略浅，避免大面积白底压住白色分类文字。 */
+    val RailBackground = Color(0xFF151515)
+    val RailSelected = Color(0xFF2E2E2E)
+
+    /** 设置页列表行与分组标题。 */
+    val SettingsRow = Color(0xFF101010)
+    val SettingsHeader = Color(0xFF1C1C1C)
+    val SettingsDivider = Color(0xFF262626)
+
+    /** 抽屉里分组标题条的底色。 */
+    val GroupHeader = Color(0xFF111111)
+
+    val DialogContainer = Color(0xFF2C2C30)
     val DialogTitle = Color(0xFFFFFFFF)
     val DialogText = Color(0xFFF0F0F0)
     val DialogSecondary = Color(0xFFBDBDBD)
     val DialogDivider = Color(0x33FFFFFF)
     val Accent = Color(0xFF81C784) // 原版 Holo 深色主题复选框为绿色
-    val ScrimOverWallpaper = Color(0x1F000000)
+    /** 「全部」分类图标用的高亮蓝。 */
+    val AllIcon = Color(0xFF4FC3F7)
 }
-
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF3B6FD4),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFD9E4FF),
-    secondary = Color(0xFF4A6572),
-    surface = Color(0xFF1E2228),
-    onSurface = Color(0xFFF2F4F7),
-)
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF8FB4FF),
     onPrimary = Color(0xFF0A2547),
     primaryContainer = Color(0xFF1B3A6B),
     secondary = Color(0xFF9AA7B0),
-    surface = Color(0xFF1E2228),
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFF2F4F7),
+    surface = Color(0xFF101010),
     onSurface = Color(0xFFF2F4F7),
+    surfaceContainer = Color(0xFF161616),
 )
 
 @Composable
 fun MyDrawerTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-            window.setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
-            window.statusBarColor = AndroidColor.TRANSPARENT
-            window.navigationBarColor = AndroidColor.TRANSPARENT
-            // 关键：通知 WindowManager 在窗口后绘制壁纸。
-            // 对应原版 @android:style/Theme.Holo.Wallpaper 的 windowShowWallpaper=true。
-            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+            // 不透明黑底：不再透壁纸，也不会在滚动时出现重影。
+            window.setBackgroundDrawable(ColorDrawable(AndroidColor.BLACK))
+            window.statusBarColor = AndroidColor.BLACK
+            window.navigationBarColor = AndroidColor.BLACK
         }
     }
-    MaterialTheme(
-        colorScheme = if (dark) DarkColors else LightColors,
-        content = content,
-    )
+    // 界面固定深色，不跟随系统浅色主题，避免白色控件叠在黑色背景上。
+    MaterialTheme(colorScheme = DarkColors, content = content)
 }
 
 /**
