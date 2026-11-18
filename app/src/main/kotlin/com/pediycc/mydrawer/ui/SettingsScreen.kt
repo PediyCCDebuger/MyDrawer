@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.BuildConfig
+import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UsageStatsHelper
@@ -201,6 +202,27 @@ fun SettingsScreen(
 
             // ---- 程序列表 ----
             item { SectionTitle("程序列表") }
+            item {
+                // 「上次使用的分类」用空字符串表示，其余为固定入口 id。
+                val startupOptions = buildList {
+                    add("" to "上次使用的分类")
+                    if (prefs.allEnabled) add("all" to "全部")
+                    Categories.orderedFor(prefs)
+                        .filter { it.id != Categories.OTHER || vm.otherHasApps(prefs) }
+                        .forEach { add(it.id to (prefs.categoryLabels[it.id] ?: it.label)) }
+                }
+                ListSettingsRow(
+                    title = "启动时进入",
+                    subtitle = when {
+                        prefs.startupCategory.isBlank() -> "上次使用的分类（${vm.categoryLabel(prefs.lastCategory)}）"
+                        else -> vm.categoryLabel(prefs.startupCategory)
+                    },
+                    icon = Icons.Filled.Login,
+                    options = startupOptions,
+                    selected = prefs.startupCategory,
+                    onSelect = { vm.setStartupCategory(it) },
+                )
+            }
             item {
                 SwitchRow(
                     title = "左手模式",

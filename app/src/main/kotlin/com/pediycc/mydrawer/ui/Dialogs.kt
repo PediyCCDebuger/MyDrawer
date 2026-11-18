@@ -1,7 +1,9 @@
 package com.pediycc.mydrawer.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.ui.text.font.FontWeight
@@ -16,6 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -39,6 +45,7 @@ fun AppMenuSheet(
     onDetails: () -> Unit,
     onToggleHidden: () -> Unit,
     onSetCategory: (String) -> Unit,
+    onClearCategory: () -> Unit,
     onRename: () -> Unit,
     onIcon: () -> Unit,
 ) {
@@ -56,6 +63,9 @@ fun AppMenuSheet(
                 if (app.packageName in prefs.hiddenPackages) "取消隐藏" else "隐藏应用",
                 onToggleHidden,
             )
+            if (app.categoryId != Categories.OTHER) {
+                MenuItem(Icons.Filled.RemoveCircle, "取消分类（移入未分类）", onClearCategory)
+            }
             Spacer(Modifier.height(8.dp))
             Text("移动到分类", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
             Categories.orderedFor(prefs).filter { it.id != Categories.FREQUENT }.forEach { cat ->
@@ -81,6 +91,7 @@ fun CategoryMenuSheet(
     onIcon: () -> Unit,
     onNew: () -> Unit,
     onDelete: () -> Unit,
+    onReorderSort: () -> Unit,
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
     val deletable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
@@ -95,8 +106,7 @@ fun CategoryMenuSheet(
             MenuItem(Icons.Filled.Add, "新建分类", onNew)
             MenuItem(Icons.Filled.Edit, "重命名分类", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
-            MenuItem(Icons.Filled.ArrowUpward, "分类上移", { vm.moveCategory(categoryId, -1) })
-            MenuItem(Icons.Filled.ArrowDownward, "分类下移", { vm.moveCategory(categoryId, 1) })
+            MenuItem(Icons.Filled.SwapVert, "拖动排序分类", onReorderSort)
             if (deletable) {
                 MenuItem(Icons.Filled.Delete, "删除分类", onDelete)
             }
@@ -111,25 +121,91 @@ fun CategoryMenuSheet(
             }
             if (currentMode == SortMode.MANUAL) {
                 Spacer(Modifier.height(8.dp))
-                Text("手动排序（点箭头调整）", style = MaterialTheme.typography.labelSmall, color = DrawerColors.DialogSecondary)
+                Text("手动排序（长按拖放调整位置）", style = MaterialTheme.typography.labelSmall, color = DrawerColors.DialogSecondary)
                 val apps = remember(prefs) { com.pediycc.mydrawer.data.Sorter.manualOrderOf(vm.ui.value.apps, prefs, categoryId) }
-                apps.forEachIndexed { index, pkg ->
+                DragReorderList(
+                    items = apps,
+                    keyOf = { it },
+                    rowHeight = 40.dp,
+                    onReorder = { from, to -> vm.reorderManual(categoryId, from, to) },
+                ) { pkg, dragging ->
                     val label = vm.ui.value.apps.firstOrNull { it.packageName == pkg }?.label ?: pkg
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .background(if (dragging) Color(0x33FFFFFF) else Color.Transparent)
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("${index + 1}. $label", color = Color.White, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { vm.moveManual(categoryId, pkg, -1) }) {
-                            Icon(Icons.Filled.KeyboardArrowUp, "上移", tint = Color.White)
-                        }
-                        IconButton(onClick = { vm.moveManual(categoryId, pkg, 1) }) {
-                            Icon(Icons.Filled.KeyboardArrowDown, "下移", tint = Color.White)
-                        }
+                        Icon(Icons.Filled.DragHandle, null, tint = DrawerColors.DialogSecondary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(label, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
                     }
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+/**
+ * 通用拖拽排序列表：长按某一行后上下拖动，越过相邻行即交换位置并即时生效。
+ * [onReorder] 参数为移动前 / 移动后的下标。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun <T> DragReorderList(
+    items: List<T>,
+    keyOf: (T) -> String,
+    rowHeight: Dp,
+    onReorder: (from: Int, to: Int) -> Unit,
+    row: @Composable (T, Boolean) -> Unit,
+) {
+    var draggingKey by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val rowPx = with(LocalDensity.current) { rowHeight.toPx() }
+    // 每次交换都会触发重组；用手势块读取最新的列表与回调，避免按下标算错位置。
+    val latestItems by rememberUpdatedState(items)
+    val latestKeyOf by rememberUpdatedState(keyOf)
+    val latestOnReorder by rememberUpdatedState(onReorder)
+
+    Column {
+        items.forEachIndexed { _, item ->
+            val k = keyOf(item)
+            val dragging = draggingKey == k
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                    .pointerInput(k) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { draggingKey = k; dragOffset = 0f },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                if (draggingKey != k) return@detectDragGesturesAfterLongPress
+                                dragOffset += dragAmount.y
+                                val list = latestItems
+                                val from = list.indexOfFirst { latestKeyOf(it) == draggingKey }
+                                if (from < 0 || rowPx <= 0f) return@detectDragGesturesAfterLongPress
+                                val shift = (dragOffset / rowPx).toInt()
+                                if (shift == 0) return@detectDragGesturesAfterLongPress
+                                val to = (from + shift).coerceIn(0, list.lastIndex)
+                                val applied = to - from
+                                if (applied != 0) {
+                                    latestOnReorder(from, to)
+                                    dragOffset -= applied * rowPx
+                                } else {
+                                    dragOffset = 0f
+                                }
+                            },
+                            onDragEnd = { draggingKey = null; dragOffset = 0f },
+                            onDragCancel = { draggingKey = null; dragOffset = 0f },
+                        )
+                    }
+            ) {
+                row(item, dragging)
+            }
         }
     }
 }
@@ -167,6 +243,44 @@ fun MoveDialog(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+        }
+    }
+}
+
+/** 分类拖拽排序对话框：长按分类行上下拖动即可自由调整分类栏顺序。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
+    val cats = remember(prefs) { Categories.orderedFor(prefs) }
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("拖动排序分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text("长按分类上下拖动，调整分类栏显示顺序。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            DragReorderList(
+                items = cats,
+                keyOf = { it.id },
+                rowHeight = 44.dp,
+                onReorder = { from, to -> vm.reorderCategory(from, to) },
+            ) { cat, dragging ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .background(if (dragging) Color(0x33FFFFFF) else Color.Transparent)
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.DragHandle, null, tint = DrawerColors.DialogSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(vm.categoryLabel(cat.id), color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("完成", color = DrawerColors.Accent) }
         }
     }
 }
@@ -325,6 +439,8 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
     var proxyExpanded by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
+    // 已下载的安装包保留在对话框里：系统安装界面被返回键取消后，可一键重装而不必重新下载。
+    var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
     val state by vm.ui.collectAsState()
 
     fun check() {
@@ -421,12 +537,24 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
                 TextButton(onClick = {
                     downloading = true
                     result = null
-                    vm.downloadAndInstall(newVersion) { msg ->
+                    downloadedApk = null
+                    // 先下载完整安装包，再拉起系统安装器；下载完成即把文件交给界面保留。
+                    vm.downloadAndInstall(newVersion) { msg, file ->
                         downloading = false
                         result = msg
+                        downloadedApk = file
                     }
                 }) {
                     Text("下载并安装", color = DrawerColors.Accent)
+                }
+            }
+            if (downloadedApk != null && !downloading) {
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = {
+                    result = null
+                    vm.installDownloaded(downloadedApk!!) { msg -> result = msg }
+                }) {
+                    Text("重新安装", color = DrawerColors.Accent)
                 }
             }
         }

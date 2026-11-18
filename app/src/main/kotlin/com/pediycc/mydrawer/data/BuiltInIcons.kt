@@ -23,7 +23,7 @@ object BuiltInIcons {
         "phone" to Color(0xFF66BB6A),          // 通讯 绿
         "build" to Color(0xFFFFB300),          // 工具 琥珀
         "settings" to Color(0xFF90A4AE),       // 设置 蓝灰
-        "apps" to Color(0xFF4DD0E1),           // 其他 青
+        "apps" to Color(0xFF4DD0E1),           // 未分类 青
         "star" to Color(0xFFFFCA28),           // 最常用 金
     )
 
@@ -47,7 +47,7 @@ object BuiltInIcons {
         Def("phone", "通讯", Icons.Filled.Phone),
         Def("build", "工具", Icons.Filled.Build),
         Def("settings", "设置", Icons.Filled.Settings),
-        Def("apps", "其他", Icons.Filled.Apps),
+        Def("apps", "未分类", Icons.Filled.Apps),
         Def("star", "最常用", Icons.Filled.Star),
         // 通用 / 常用应用语义
         Def("home", "主页", Icons.Filled.Home),

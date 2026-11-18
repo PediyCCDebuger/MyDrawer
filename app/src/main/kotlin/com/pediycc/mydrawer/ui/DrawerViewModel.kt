@@ -44,10 +44,19 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     private val backup = BackupManager(context)
     private val iconStore = IconStore(context)
 
-    private val _ui = MutableStateFlow(DrawerUiState(prefs = prefs.current))
+    private val _ui = MutableStateFlow(
+        DrawerUiState(prefs = prefs.current, selectedCategory = resolveStartupCategory(prefs.current))
+    )
     val ui: StateFlow<DrawerUiState> = _ui.asStateFlow()
 
     init { refresh() }
+
+    /**
+     * 启动时进入的分类：startupCategory 为空则沿用 lastCategory（上次使用的分类），
+     * 否则固定进入指定入口；无效 / 已隐藏的入口最后在 refresh 里由 fallbackCategory 兜底。
+     */
+    private fun resolveStartupCategory(p: UserPrefs): String =
+        if (p.startupCategory.isBlank()) p.lastCategory else p.startupCategory
 
     fun refresh() {
         viewModelScope.launch {
@@ -58,7 +67,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 apps = apps,
                 prefs = prefs.current,
                 loading = false,
-                selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
+                selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current, apps),
                 selected = _ui.value.selected.intersect(apps.map { it.packageName }.toSet()),
                 usageCounts = usage,
             )
@@ -72,10 +81,12 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 关闭「全部」/「最常用」或删除分类后，停在已隐藏入口上的选中项要回落到第一个可用分类。 */
-    private fun fallbackCategory(current: String, p: UserPrefs): String {
+    /** 关闭「全部」/「最常用」、删除分类或「未分类」变空后，停在已隐藏入口上的选中项回落到第一个可用分类。 */
+    private fun fallbackCategory(current: String, p: UserPrefs, apps: List<AppInfo> = _ui.value.apps): String {
         if (current == "all") return if (p.allEnabled) "all" else firstCategory(p)
         if (current == Categories.FREQUENT && !p.frequentEnabled) return firstCategory(p)
+        // 「未分类」已无应用会自动隐藏，若正停在上面则回落到第一个分类。
+        if (current == Categories.OTHER && !otherHasApps(p, apps)) return firstCategory(p)
         // 分类被删除（内置或自建）后不再存在于可用列表，回落到第一个分类。
         if (current !in Categories.orderedFor(p).map { it.id }) return firstCategory(p)
         return current
@@ -85,7 +96,19 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         Categories.orderedFor(p).firstOrNull()?.id ?: "all"
 
     fun selectCategory(id: String) {
-        _ui.value = _ui.value.copy(selectedCategory = id, selectMode = false, selected = emptySet())
+        prefs.update { it.copy(lastCategory = id) }
+        _ui.value = _ui.value.copy(
+            selectedCategory = id,
+            prefs = prefs.current,
+            selectMode = false,
+            selected = emptySet(),
+        )
+    }
+
+    /** 设置「启动时进入的分类」：空字符串表示每次沿用上次分类。 */
+    fun setStartupCategory(id: String) {
+        prefs.update { it.copy(startupCategory = id) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
     fun setQuery(q: String) {
@@ -209,17 +232,53 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
+    /** 拖拽排序：把 [fromIndex] 处的分类移到 [toIndex]（均按 orderedFor 的完整列表下标）。 */
+    fun reorderCategory(fromIndex: Int, toIndex: Int) {
+        val ids = Categories.orderedFor(prefs.current).map { it.id }.toMutableList()
+        if (fromIndex !in ids.indices || toIndex !in ids.indices || fromIndex == toIndex) return
+        val id = ids.removeAt(fromIndex)
+        ids.add(toIndex, id)
+        prefs.update { it.copy(categoryOrder = ids) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    /** 拖拽排序：把某分类手动排序列表里 [fromIndex] 的应用移到 [toIndex]。 */
+    fun reorderManual(categoryId: String, fromIndex: Int, toIndex: Int) {
+        val list = (prefs.current.manualOrders[categoryId]
+            ?: Sorter.manualOrderOf(_ui.value.apps, prefs.current, categoryId)).toMutableList()
+        if (fromIndex !in list.indices || toIndex !in list.indices || fromIndex == toIndex) return
+        val pkg = list.removeAt(fromIndex)
+        list.add(toIndex, pkg)
+        prefs.update { p -> p.copy(manualOrders = p.manualOrders + (categoryId to list)) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    /** 网格拖拽：在手动排序分类内把 [packageName] 相对移动 [delta] 个位置。 */
+    fun reorderManualBy(categoryId: String, packageName: String, delta: Int) {
+        val list = (prefs.current.manualOrders[categoryId]
+            ?: Sorter.manualOrderOf(_ui.value.apps, prefs.current, categoryId)).toMutableList()
+        val from = list.indexOf(packageName)
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, list.lastIndex)
+        if (to == from) return
+        list.removeAt(from)
+        list.add(to, packageName)
+        prefs.update { p -> p.copy(manualOrders = p.manualOrders + (categoryId to list)) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
     /** 新建分类；若当前停在已删除分类上，创建后自动切到新分类。 */
     fun createCategory(label: String): String {
         val id = prefs.addCategory(label.trim())
+        prefs.update { it.copy(lastCategory = id) }
         _ui.value = _ui.value.copy(prefs = prefs.current, selectedCategory = id)
         notify("分类「${label.trim()}」已创建")
         return id
     }
 
     /**
-     * 删除分类。内置分类也允许删除，但「其他」「最常用」保留；
-     * 若正停在该分类，回落到第一个可用分类。原分类应用由 AppRepository 在下次刷新时归入「其他」。
+     * 删除分类。内置分类也允许删除，但「未分类」「最常用」保留；
+     * 若正停在该分类，回落到第一个可用分类。原分类应用由 AppRepository 在下次刷新时归入「未分类」。
      */
     fun deleteCategory(categoryId: String) {
         if (categoryId == Categories.OTHER || categoryId == Categories.FREQUENT) return
@@ -229,7 +288,36 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
         )
         refresh()
-        notify("分类已删除，其中的应用已移入「其他」")
+        notify("分类已删除，其中的应用已移入「未分类」")
+    }
+
+    /** 取消某个应用的分类，使其进入「未分类」。 */
+    fun clearCategory(packageName: String) {
+        prefs.overrideCategory(packageName, Categories.OTHER)
+        refresh()
+        notify("已取消分类，应用移入「未分类」")
+    }
+
+    /** 多选批量取消分类：把选中的应用全部移入「未分类」。 */
+    fun clearCategoryForSelected() {
+        val ids = _ui.value.selected
+        if (ids.isEmpty()) {
+            notify("请先选择应用")
+            return
+        }
+        prefs.overrideCategories(ids, Categories.OTHER)
+        _ui.value = _ui.value.copy(selectMode = false, selected = emptySet())
+        refresh()
+        notify("已将 ${ids.size} 个应用移入「未分类」")
+    }
+
+    /**
+     * 「未分类」在没有未分类应用时自动隐藏；只要有应用落入该分类就自动出现。
+     * 判断基于全部可见应用（排除手动隐藏的），不受当前搜索词影响。
+     */
+    fun otherHasApps(p: UserPrefs = prefs.current, apps: List<AppInfo> = _ui.value.apps): Boolean {
+        val visible = apps.filterNot { it.packageName in p.hiddenPackages }
+        return visible.any { it.categoryId == Categories.OTHER }
     }
 
     /** 首次进入时的使用频率授权提示，标记后不再重复。 */
@@ -348,25 +436,44 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun downloadAndInstall(info: Updater.ReleaseInfo, onDone: (String) -> Unit = {}) {
+    /**
+     * 先完整下载，再直接拉起系统安装器——下载前不做任何「安装未知应用」授权检查，
+     * 也不跳转授权设置页。下载结果（APK 文件）回调给界面保留：
+     * 即使系统安装界面被返回键取消，用户仍能一键「重新安装」这个已下载的包，无需再次下载。
+     */
+    fun downloadAndInstall(info: Updater.ReleaseInfo, onDone: (String, java.io.File?) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             val ctx = getApplication<Application>()
             when (val result = Updater.download(ctx, info, prefs.current.updateProxy)) {
                 is Updater.DownloadResult.Fail -> {
                     notify(result.reason)
-                    onDone(result.reason)
+                    onDone(result.reason, null)
                 }
                 is Updater.DownloadResult.Ok -> {
-                    // 直接拉起系统安装器，不再检查 / 引导「安装未知应用」授权：
-                    // 实测该开关并非必需，系统安装界面返回后仍能正常安装。
+                    // 先下载已完成，这里才拉起系统安装器；不再检查 / 引导任何授权。
                     val msg = when (Updater.install(ctx, result.file)) {
                         Updater.InstallResult.STARTED -> "下载完成，请在系统安装界面确认安装"
-                        Updater.InstallResult.FAILED -> "无法拉起安装程序，请更换代理重新下载"
+                        Updater.InstallResult.FAILED -> "安装包已下载，但无法拉起安装器，可点「重新安装」重试"
                     }
                     notify(msg)
-                    onDone(msg)
+                    onDone(msg, result.file)
                 }
             }
+        }
+    }
+
+    /** 用已下载的安装包重新安装，不再下载，也不需要任何预授权。 */
+    fun installDownloaded(file: java.io.File, onDone: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val msg = if (!file.exists()) {
+                "安装包已失效，请重新下载"
+            } else when (Updater.install(ctx, file)) {
+                Updater.InstallResult.STARTED -> "请在系统安装界面确认安装"
+                Updater.InstallResult.FAILED -> "无法拉起安装器，请重试或更换代理重新下载"
+            }
+            notify(msg)
+            onDone(msg)
         }
     }
 

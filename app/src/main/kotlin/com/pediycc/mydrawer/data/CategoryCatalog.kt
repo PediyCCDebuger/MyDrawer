@@ -24,6 +24,6 @@ class CategoryCatalog(context: Context) {
 
     val size: Int get() = rules.size
 
-    /** 按包名精确匹配；未命中进「其他」。 */
+    /** 按包名精确匹配；未命中进「未分类」。 */
     fun classify(packageName: String): String = rules[packageName] ?: Categories.OTHER
 }

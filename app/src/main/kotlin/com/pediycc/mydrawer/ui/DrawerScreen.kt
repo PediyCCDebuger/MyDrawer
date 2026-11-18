@@ -65,6 +65,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
     var showUpdate by remember { mutableStateOf(false) }
     var newCategoryDialog by remember { mutableStateOf(false) }
     var showUsagePrompt by remember { mutableStateOf(false) }
+    var categoryReorderOpen by remember { mutableStateOf(false) }
 
     // 第一次进入且未授予「使用情况访问权限」时提示一次；用户选「暂不」后不再打扰。
     LaunchedEffect(Unit) {
@@ -119,6 +120,9 @@ fun DrawerScreen(vm: DrawerViewModel) {
                             IconButton(onClick = { vm.selectAllVisible() }) {
                                 Icon(Icons.Filled.SelectAll, "全选", tint = Color.White)
                             }
+                            IconButton(onClick = { vm.clearCategoryForSelected() }) {
+                                Icon(Icons.Filled.RemoveCircle, "取消分类（移入未分类）", tint = Color.White)
+                            }
                             IconButton(onClick = { moveCategoryOpen = true }) {
                                 Icon(Icons.Filled.DriveFileMove, "移动到分类", tint = Color.White)
                             }
@@ -152,8 +156,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
             },
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
-                val categories = remember(state.prefs) {
-                    Categories.orderedFor(state.prefs)
+                val categories = remember(state.prefs, state.apps) {
+                    Categories.orderedFor(state.prefs).filter { cat ->
+                        // 「未分类」没有应用时自动隐藏，出现未分类应用时自动显示。
+                        cat.id != Categories.OTHER || vm.otherHasApps(state.prefs, state.apps)
+                    }
                 }
                 val rail: @Composable () -> Unit = {
                     CategoryRail(
@@ -193,7 +200,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Text(
-                        "点击应用选择 · 右上角箭头可移动到分类",
+                        "点击应用选择 · 右上角箭头移动到分类 / 减号取消分类",
                         color = Color.White,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -226,6 +233,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onDetails = { openAppDetails(app.packageName); menuApp = null },
             onToggleHidden = { vm.toggleHidden(app.packageName); menuApp = null },
             onSetCategory = { vm.setCategoryOverride(app.packageName, it); menuApp = null },
+            onClearCategory = { vm.clearCategory(app.packageName); menuApp = null },
             onRename = { renameAppTarget = app; menuApp = null },
             onIcon = { iconTarget = IconTarget.App(app.packageName); menuApp = null },
         )
@@ -241,6 +249,15 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onIcon = { iconTarget = IconTarget.Category(id); menuCategory = null },
             onNew = { newCategoryDialog = true; menuCategory = null },
             onDelete = { vm.deleteCategory(id); menuCategory = null },
+            onReorderSort = { categoryReorderOpen = true; menuCategory = null },
+        )
+    }
+
+    if (categoryReorderOpen) {
+        CategoryReorderDialog(
+            vm = vm,
+            prefs = state.prefs,
+            onDismiss = { categoryReorderOpen = false },
         )
     }
 
@@ -320,7 +337,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
     // 弹窗/底部菜单自己处理返回键，这里不要抢；只有设置页和多选需要自己收尾。
     val overlayOpen = menuApp != null || menuCategory != null || moveCategoryOpen ||
         renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate ||
-        newCategoryDialog || showUsagePrompt
+        newCategoryDialog || showUsagePrompt || categoryReorderOpen
     // 设置页 / 多选都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
     // 放在最后注册，保证优先于主界面的默认返回行为。
     BackHandler(enabled = !overlayOpen && (showSettings || state.selectMode)) {

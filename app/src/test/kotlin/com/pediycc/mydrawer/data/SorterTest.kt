@@ -160,4 +160,34 @@ class SorterTest {
         assertEquals(true, Updater.isNewer("v2.4.1", "2.4.0"))
         assertEquals(false, Updater.isNewer("2.4.1", "2.4.1"))
     }
+
+    @Test
+    fun `other category is labeled unclassified`() {
+        assertEquals("未分类", Categories.labelOf(Categories.OTHER))
+        assertEquals("未分类", Categories.ALL.first { it.id == Categories.OTHER }.label)
+    }
+
+    @Test
+    fun `new backup fields default sensibly for old backups`() {
+        val raw = """{"format":"mydrawer-backup","version":1,"prefs":{"gridColumns":5}}"""
+        val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString<BackupFile>(raw)
+        assertEquals("all", parsed.prefs.lastCategory)
+        assertEquals("", parsed.prefs.startupCategory)
+    }
+
+    @Test
+    fun `startup category and last category survive backup round trip`() {
+        val p = UserPrefs(lastCategory = "games", startupCategory = "utility")
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val decoded = json.decodeFromString<BackupFile>(json.encodeToString(BackupFile(prefs = p))).prefs
+        assertEquals("games", decoded.lastCategory)
+        assertEquals("utility", decoded.startupCategory)
+    }
+
+    @Test
+    fun `minor version is compared numerically`() {
+        assertEquals(true, Updater.isNewer("v2.5.0", "2.4.1"))
+        assertEquals(false, Updater.isNewer("2.5.0", "2.5.0"))
+    }
 }

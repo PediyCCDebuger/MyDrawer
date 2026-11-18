@@ -48,8 +48,15 @@ data class UserPrefs(
     val usagePromptShown: Boolean = false,
     /** 2.4.1 新增：用户自建分类的 id 列表（名称/图标复用 categoryLabels/categoryIcons）。 */
     val customCategories: List<String> = emptyList(),
-    /** 2.4.1 新增：被删除的内置分类 id；这些入口不再显示，其下应用回落到「其他」。 */
+    /** 2.4.1 新增：被删除的内置分类 id；这些入口不再显示，其下应用回落到「未分类」。 */
     val deletedCategories: Set<String> = emptySet(),
+    /** 2.5.0 新增：上次离开时停留的分类，用于「启动时进入上次分类」。 */
+    val lastCategory: String = "all",
+    /**
+     * 2.5.0 新增：启动 APP 时进入的分类。
+     * 空字符串 = 进入上次使用的分类（[lastCategory]）；否则固定进入该分类 id / "all"。
+     */
+    val startupCategory: String = "",
 )
 
 object SortMode {
@@ -192,7 +199,7 @@ class Preferences(context: Context) {
         return id
     }
 
-    /** 删除分类：内置与自定义都可删；「其他」和「最常用」是兜底/特殊入口，保留。 */
+    /** 删除分类：内置与自定义都可删；「未分类」和「最常用」是兜底/特殊入口，保留。 */
     fun deleteCategory(id: String) {
         if (id == Categories.OTHER || id == Categories.FREQUENT) return
         update { p ->

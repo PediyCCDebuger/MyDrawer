@@ -35,7 +35,7 @@ object Categories {
         CategoryDef("phone", "通讯", "builtin:phone"),
         CategoryDef("utility", "工具", "builtin:build"),
         CategoryDef("settings", "设置", "builtin:settings"),
-        CategoryDef("other", "其他", "builtin:apps"),
+        CategoryDef("other", "未分类", "builtin:apps"),
     )
     const val OTHER = "other"
     const val FREQUENT = "frequent"
@@ -44,7 +44,7 @@ object Categories {
     private val labelById = ALL.associateBy { it.id }
 
     fun labelOf(id: String): String =
-        if (id == FREQUENT) FREQUENT_DEF.label else labelById[id]?.label ?: "其他"
+        if (id == FREQUENT) FREQUENT_DEF.label else labelById[id]?.label ?: "未分类"
 
     fun iconKeyOf(id: String): String =
         labelById[id]?.iconKey ?: if (id == FREQUENT) FREQUENT_DEF.iconKey else "builtin:apps"

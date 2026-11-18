@@ -28,7 +28,7 @@ class AppRepository(
             val icon = runCatching { appInfo.loadIcon(pm) }.getOrNull()
             val classified = prefs.current.categoryOverrides[pkg.packageName]
                 ?: catalog.classify(pkg.packageName)
-            // 分类被删除后，原本落在其中的应用统一回落到「其他」，避免变成看不见的孤儿应用。
+            // 分类被删除后，原本落在其中的应用统一回落到「未分类」，避免变成看不见的孤儿应用。
             val categoryId = if (classified in prefs.current.deletedCategories) Categories.OTHER else classified
 
             result += AppInfo(
