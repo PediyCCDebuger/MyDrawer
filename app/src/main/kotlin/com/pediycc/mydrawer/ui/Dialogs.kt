@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.TextStyle
@@ -35,7 +36,11 @@ import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UserPrefs
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 应用长按菜单。2.6.1：从 ModalBottomSheet 改为限高可滚动的 ThemedDialog。
+ * 原实现在「上滑展开到底 → 内部 verticalScroll 滚动」后，bottom sheet 的拖拽/滚动
+ * 节点会吞掉菜单项的点击命中，导致所有项点不动；改成普通对话框后不再有该手势冲突。
+ */
 @Composable
 fun AppMenuSheet(
     app: AppInfo,
@@ -49,11 +54,13 @@ fun AppMenuSheet(
     onRename: () -> Unit,
     onIcon: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF2A2D31)) {
-        Column(Modifier.padding(16.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
-            Text(app.label, style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = DrawerColors.DialogSecondary)
-            Spacer(Modifier.height(12.dp))
+    // 限高并允许滚动，短屏/横屏也不溢出；列表超出一屏时正常滚动，点击始终有效。
+    val maxList = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text(app.label, style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = DrawerColors.DialogSecondary)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().heightIn(max = maxList).verticalScroll(rememberScrollState())) {
             MenuItem(Icons.Filled.Launch, "启动应用", onLaunch)
             MenuItem(Icons.Filled.Info, "属性", onDetails)
             MenuItem(Icons.Filled.Edit, "重命名", onRename)
@@ -75,12 +82,14 @@ fun AppMenuSheet(
                     { onSetCategory(cat.id) },
                 )
             }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 分类长按菜单。2.6.1：同 AppMenuSheet，从 ModalBottomSheet 改为限高可滚动的
+ * ThemedDialog，消除上滑展开到底后菜单项点击失效的问题。
+ */
 @Composable
 fun CategoryMenuSheet(
     categoryId: String,
@@ -96,14 +105,15 @@ fun CategoryMenuSheet(
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
     val deletable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF2A2D31)) {
-        Column(Modifier.padding(16.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
-            Text(
-                vm.categoryLabel(categoryId),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-            )
-            Spacer(Modifier.height(12.dp))
+    val maxList = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text(
+            vm.categoryLabel(categoryId),
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+        )
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().heightIn(max = maxList).verticalScroll(rememberScrollState())) {
             MenuItem(Icons.Filled.Add, "新建分类", onNew)
             MenuItem(Icons.Filled.Edit, "重命名分类", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
@@ -127,7 +137,6 @@ fun CategoryMenuSheet(
             if (currentMode == SortMode.MANUAL) {
                 MenuItem(Icons.Filled.Reorder, "拖动排序此分类应用", onReorderApps)
             }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -284,16 +293,18 @@ fun MoveDialog(
 @Composable
 fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
     val cats = remember(prefs) { Categories.orderedFor(prefs) }
-    ThemedDialog(onDismissRequest = onDismiss) {
+    // 窗口加大：更宽的左右边距 + 按屏幕高度给出更大的列表上限（横屏/短屏自动收敛）。
+    val reorderMax = (LocalConfiguration.current.screenHeightDp * 0.82f).dp
+    ThemedDialog(onDismissRequest = onDismiss, horizontalPadding = 12.dp) {
         Text("拖动排序分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
         Text("按住每行右侧的两条横条上下拖动，调整分类栏显示顺序。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
-        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.heightIn(max = reorderMax).verticalScroll(rememberScrollState())) {
             DragReorderList(
                 items = cats,
                 keyOf = { it.id },
-                rowHeight = 48.dp,
+                rowHeight = 56.dp,
                 onReorder = { from, to -> vm.reorderCategory(from, to) },
             ) { cat, _ ->
                 Row(
@@ -324,16 +335,17 @@ fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -
 @Composable
 fun AppReorderDialog(categoryId: String, vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
     val pkgs = remember(prefs) { com.pediycc.mydrawer.data.Sorter.manualOrderOf(vm.ui.value.apps, prefs, categoryId) }
-    ThemedDialog(onDismissRequest = onDismiss) {
+    val reorderMax = (LocalConfiguration.current.screenHeightDp * 0.82f).dp
+    ThemedDialog(onDismissRequest = onDismiss, horizontalPadding = 12.dp) {
         Text("排序 · ${vm.categoryLabel(categoryId)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
         Text("按住每行右侧的两条横条上下拖动，把应用放到任意位置。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
-        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.heightIn(max = reorderMax).verticalScroll(rememberScrollState())) {
             DragReorderList(
                 items = pkgs,
                 keyOf = { it },
-                rowHeight = 52.dp,
+                rowHeight = 60.dp,
                 onReorder = { from, to -> vm.reorderManual(categoryId, from, to) },
             ) { pkg, _ ->
                 val app = vm.ui.value.apps.firstOrNull { it.packageName == pkg }

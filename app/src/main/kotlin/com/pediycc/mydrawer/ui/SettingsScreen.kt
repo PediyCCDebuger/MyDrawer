@@ -198,8 +198,12 @@ fun SettingsScreen(
             item {
                 val hasPwd = prefs.hiddenAppsPasswordHash.isNotBlank()
                 SettingsRow(
-                    title = "使用密码",
-                    subtitle = if (hasPwd) "管理隐藏应用时需输入密码" else "未设置，点此设置密码",
+                    title = "使用密码（管理隐藏应用）",
+                    subtitle = if (hasPwd) {
+                        "进入「管理隐藏应用」时需输入密码，点此修改或清除"
+                    } else {
+                        "未设置：进入「管理隐藏应用」无需验证，点此设置"
+                    },
                     icon = Icons.Filled.Lock,
                     onClick = { passwordDialog = true },
                     trailing = { Text(if (hasPwd) "已设置" else "未设置", color = DrawerColors.DialogSecondary) },

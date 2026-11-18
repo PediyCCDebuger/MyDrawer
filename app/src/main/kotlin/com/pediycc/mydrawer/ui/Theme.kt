@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
@@ -99,6 +100,7 @@ fun MyDrawerTheme(content: @Composable () -> Unit) {
 @Composable
 fun ThemedDialog(
     onDismissRequest: () -> Unit,
+    horizontalPadding: Dp = 24.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BasicAlertDialog(onDismissRequest = onDismissRequest) {
@@ -107,7 +109,7 @@ fun ThemedDialog(
             color = DrawerColors.DialogContainer,
             contentColor = DrawerColors.DialogText,
             shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
         ) {
             Column(Modifier.padding(20.dp), content = content)
         }
