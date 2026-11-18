@@ -79,6 +79,68 @@ object Sorter {
         }
     }
 
+    /**
+     * 2.7.0 分类嵌套：返回某个分类视图里真正要显示的分组序列。
+     *
+     * - [categoryId] 是用户当前选中的分类（顶层或 "all" / "frequent"）。
+     * - 某个分类的直接子分类会作为「子分组」出现在它的应用之前 / 之后（[prefs.nestedChildMode]）。
+     * - 子分类只显示属于它自己的应用，且用该子分类自己的排序方式；这与父分类应用的排序相互独立。
+     * - 支持多层嵌套：子分类的子分类递归展开。
+     *
+     * 返回 (分组id, 该分组应用列表, 是否为「分类入口」占位) —— 分类入口本身没有应用，
+     * 由界面画成一个可点进的分类卡片，因此这里用 [NestedGroup] 表达更清晰。
+     */
+    data class NestedGroup(
+        val categoryId: String,
+        val apps: List<AppInfo>,
+        /** true 表示这是一个嵌套子分类的入口（即使没有应用也要显示）。 */
+        val isChildEntry: Boolean = false,
+    )
+
+    fun groupsWithNested(
+        categoryId: String,
+        apps: List<AppInfo>,
+        prefs: UserPrefs,
+        usageCounts: Map<String, Int> = emptyMap(),
+    ): List<NestedGroup> {
+        val counts = if (usageCounts.isNotEmpty()) usageCounts else prefs.launchCounts
+
+        fun sortOf(catId: String, list: List<AppInfo>): List<AppInfo> {
+            val mode = prefs.categorySortModes[catId] ?: prefs.sortMode
+            if (catId == Categories.FREQUENT && prefs.categorySortModes[catId] == null) {
+                return list.sortedWith(
+                    compareByDescending<AppInfo> { counts[it.packageName] ?: 0 }
+                        .then { a, b -> collator.compare(a.label, b.label) }
+                        .thenBy { it.packageName },
+                ).take(10)
+            }
+            return sort(list, mode, counts, prefs.manualOrders[catId] ?: emptyList())
+        }
+
+        return when (categoryId) {
+            Categories.FREQUENT -> {
+                val hot = apps.filter { (counts[it.packageName] ?: 0) > 0 }
+                listOf(NestedGroup(Categories.FREQUENT, sortOf(Categories.FREQUENT, hot)))
+            }
+            "all" -> {
+                // 「全部」：每个分类各成一组，按分类顺序；嵌套子分类也单独成组便于查看。
+                Categories.orderedFor(prefs).flatMap { cat ->
+                    val inCat = apps.filter { it.categoryId == cat.id }
+                    if (inCat.isNotEmpty()) listOf(NestedGroup(cat.id, sortOf(cat.id, inCat))) else emptyList()
+                }
+            }
+            else -> {
+                // 某个分类：直接子分类作为「入口块」按规则排序后，放在应用之前 / 之后；
+                // 应用用本分类自己的排序规则，二者互不影响。点进子分类再按子分类规则显示其内部。
+                val children = Categories.childrenOf(categoryId, prefs)
+                    .map { NestedGroup(it.id, emptyList(), isChildEntry = true) }
+                val ownApps = apps.filter { it.categoryId == categoryId }
+                val own = if (ownApps.isNotEmpty()) listOf(NestedGroup(categoryId, sortOf(categoryId, ownApps))) else emptyList()
+                if (prefs.nestedChildMode == NestedChildMode.BACK) own + children else children + own
+            }
+        }
+    }
+
     /** 把某分类当前顺序固化为手动排序（供「手动排序」入口初始化）。 */
     fun manualOrderOf(apps: List<AppInfo>, prefs: UserPrefs, categoryId: String): List<String> {
         val inCat = if (categoryId == Categories.FREQUENT) {

@@ -11,7 +11,9 @@ import com.pediycc.mydrawer.data.BackupManager
 import com.pediycc.mydrawer.data.BuiltInIcons
 import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.CategoryCatalog
+import com.pediycc.mydrawer.data.Pinyin
 import com.pediycc.mydrawer.data.Preferences
+import com.pediycc.mydrawer.data.SearchMatcher
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Sorter
 import com.pediycc.mydrawer.data.Updater
@@ -310,11 +312,61 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         notify("分类已删除，其中的应用已移入「未分类」")
     }
 
+    // ---- 2.7.0 分类嵌套 ----
+
+    /** 把 [childId] 挂到 [parentId] 下；parentId 为空则移回顶层。 */
+    fun setCategoryParent(childId: String, parentId: String) {
+        val ok = prefs.setCategoryParent(childId, parentId)
+        if (!ok) {
+            notify("不能把分类移到自己或它的子分类里")
+            return
+        }
+        // 若当前正停在被子分类占据的位置，回落到稳定入口。
+        if (childId == _ui.value.selectedCategory) {
+            _ui.value = _ui.value.copy(
+                prefs = prefs.current,
+                selectedCategory = fallbackCategory(_ui.value.selectedCategory, prefs.current),
+            )
+        } else {
+            _ui.value = _ui.value.copy(prefs = prefs.current)
+        }
+        notify(if (parentId.isEmpty()) "已移回顶层分类" else "已移入「${categoryLabel(parentId)}」")
+    }
+
+    /** 设置父分类内子分类相对应用的位置。 */
+    fun setNestedChildMode(mode: String) {
+        prefs.setNestedChildMode(mode)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
+    /** 手动排序：拖动调整某父分类下子分类的顺序。 */
+    fun reorderNestedChild(parentId: String, from: Int, to: Int) {
+        val list = Categories.childrenOf(parentId, prefs.current).map { it.id }.toMutableList()
+        if (from !in list.indices || to !in list.indices || from == to) return
+        val id = list.removeAt(from)
+        list.add(to, id)
+        prefs.setNestedChildOrder(parentId, list)
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+    }
+
     /** 取消某个应用的分类，使其进入「未分类」。 */
     fun clearCategory(packageName: String) {
         prefs.overrideCategory(packageName, Categories.OTHER)
         refresh()
         notify("已取消分类，应用移入「未分类」")
+    }
+
+    /** 多选批量隐藏：把选中的应用加入隐藏列表并退出多选。 */
+    fun hideSelected() {
+        val ids = _ui.value.selected
+        if (ids.isEmpty()) {
+            notify("请先选择应用")
+            return
+        }
+        prefs.hidePackages(ids)
+        _ui.value = _ui.value.copy(selectMode = false, selected = emptySet())
+        refresh()
+        notify("已隐藏 ${ids.size} 个应用")
     }
 
     /** 多选批量取消分类：把选中的应用全部移入「未分类」。 */
@@ -358,7 +410,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectAllVisible() {
-        val ids = visibleGroups().flatMap { it.second }.map { it.packageName }.toSet()
+        val ids = visibleGroups().flatMap { it.apps }.map { it.packageName }.toSet()
         _ui.value = _ui.value.copy(selected = ids)
     }
 
@@ -504,29 +556,28 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(message = msg)
     }
 
-    /** 当前抽屉可见应用：隐藏过滤 → 搜索词 → 分类过滤 → 按设置排序分组。 */
-    fun visibleGroups(): List<Pair<String, List<AppInfo>>> {
+    /** 当前抽屉可见内容：隐藏过滤 → 搜索词 → 分类过滤 → 按设置排序分组（含嵌套子分类入口）。 */
+    fun visibleGroups(): List<Sorter.NestedGroup> {
         val s = _ui.value
         var apps = s.apps.filterNot { it.packageName in s.prefs.hiddenPackages }
         if (s.query.isNotBlank()) {
             val q = s.query.trim()
-            apps = apps.filter {
-                it.label.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true)
-            }
+            apps = apps.filter { SearchMatcher.matches(it.label, it.packageName, q) { Pinyin.romanize(it) } }
         }
         val counts = if (s.usageCounts.isNotEmpty()) s.usageCounts else s.prefs.launchCounts
         if (s.selectedCategory == Categories.FREQUENT) {
-            // 「最常用」只显示这一个分组，不能再按应用自身分类重复列一遍（例如高德地图既出现在
-            // 最常用，又在下面出现「网络工具 / 高德地图」）。
             apps = apps.filter { (counts[it.packageName] ?: 0) > 0 }
         } else if (s.selectedCategory != "all") {
+            // 选中某个分类时，子分类的应用不算它自己的，点进子分类才显示。
             apps = apps.filter { it.categoryId == s.selectedCategory }
         }
-        // 「最常用」只是分类栏里的独立入口；「全部」和各分类内部不再追加一段最常用。
-        return Sorter.groupEx(apps, s.prefs, s.usageCounts).filter { (id, _) ->
-            if (s.selectedCategory == Categories.FREQUENT) id == Categories.FREQUENT
-            else id != Categories.FREQUENT
-        }
+        return Sorter.groupsWithNested(s.selectedCategory, apps, s.prefs, s.usageCounts)
+            .filter { it.apps.isNotEmpty() || it.isChildEntry }
+            .filter { g ->
+                // 「最常用」只是分类栏里的独立入口；其它视图不追加这一段。
+                if (s.selectedCategory == Categories.FREQUENT) g.categoryId == Categories.FREQUENT
+                else g.categoryId != Categories.FREQUENT
+            }
     }
 
     fun categoryCount(categoryId: String): Int {

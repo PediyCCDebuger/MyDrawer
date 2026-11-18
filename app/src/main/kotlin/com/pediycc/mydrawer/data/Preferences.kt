@@ -62,6 +62,13 @@ data class UserPrefs(
      * 空字符串表示未启用密码；只存摘要，不存明文。
      */
     val hiddenAppsPasswordHash: String = "",
+    // 2.7.0 新增：分类嵌套。childId -> parentId；没有映射即为顶层分类。
+    /** 分类的父级：[子分类 id] -> [父分类 id]。嵌套分类不再单独占分类栏位置，而在父分类内容里显示。 */
+    val categoryParents: Map<String, String> = emptyMap(),
+    /** 父分类里「子分类」相对应用的位置：front=排在所有应用之前，back=排在所有应用之后。 */
+    val nestedChildMode: String = NestedChildMode.FRONT,
+    /** 手动排序时，父分类里子分类之间的顺序：parentId -> 子分类 id 顺序。 */
+    val nestedChildOrders: Map<String, List<String>> = emptyMap(),
 )
 
 object SortMode {
@@ -81,6 +88,17 @@ object SortMode {
     )
 
     fun labelOf(mode: String): String = LABELS.firstOrNull { it.first == mode }?.second ?: "按名称"
+}
+
+/** 父分类内「子分类」相对应用的位置。 */
+object NestedChildMode {
+    const val FRONT = "front" // 子分类排在全部应用之前
+    const val BACK = "back"   // 子分类排在全部应用之后
+    val LABELS = listOf(
+        FRONT to "子分类排在应用前",
+        BACK to "子分类排在应用后",
+    )
+    fun labelOf(mode: String): String = LABELS.firstOrNull { it.first == mode }?.second ?: "子分类排在应用前"
 }
 
 /** 用 SharedPreferences 存储用户设置。旧备份缺失的新字段由 kotlinx.serialization 补默认值。 */
@@ -138,6 +156,12 @@ class Preferences(context: Context) {
             if (!next.add(packageName)) next.remove(packageName)
             p.copy(hiddenPackages = next)
         }
+    }
+
+    /** 批量隐藏：把多个包加入隐藏集合（已隐藏的保持不变）。 */
+    fun hidePackages(packageNames: Collection<String>) {
+        if (packageNames.isEmpty()) return
+        update { p -> p.copy(hiddenPackages = p.hiddenPackages + packageNames) }
     }
 
     fun overrideCategory(packageName: String, categoryId: String) {
@@ -234,6 +258,27 @@ class Preferences(context: Context) {
                 manualOrders = p.manualOrders - id,
             )
         }
+    }
+
+    /** 把子分类挂到父分类下；传空 parentId 表示移回顶层。防止自挂与成环。 */
+    fun setCategoryParent(childId: String, parentId: String): Boolean {
+        if (childId == parentId) return false
+        if (Categories.isDescendant(parentId, childId, current.categoryParents)) return false // 父是子的后代会成环
+        update { p ->
+            val next = if (parentId.isEmpty()) p.categoryParents - childId
+            else p.categoryParents + (childId to parentId)
+            p.copy(categoryParents = next)
+        }
+        return true
+    }
+
+    /** 设置某父分类下子分类的手动顺序。 */
+    fun setNestedChildOrder(parentId: String, order: List<String>) {
+        update { p -> p.copy(nestedChildOrders = p.nestedChildOrders + (parentId to order)) }
+    }
+
+    fun setNestedChildMode(mode: String) {
+        update { it.copy(nestedChildMode = mode) }
     }
 
     fun replaceAll(prefs: UserPrefs) {

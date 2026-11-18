@@ -205,4 +205,103 @@ class SorterTest {
         assertEquals(true, Updater.isNewer("v2.5.0", "2.4.1"))
         assertEquals(false, Updater.isNewer("2.5.0", "2.5.0"))
     }
+
+    // ---- 搜索 ----
+    private val fakePinyin: (String) -> String = { text ->
+        mapOf("微信" to "wei xin", "设置" to "she zhi", "相机" to "xiang ji")
+            .getOrElse(text) { "" }
+    }
+
+    @Test
+    fun `pinyin full and initials match Chinese label`() {
+        assert(SearchMatcher.matches("微信", "com.tencent.mm", "weixin", fakePinyin))
+        assert(SearchMatcher.matches("微信", "com.tencent.mm", "wx", fakePinyin))
+        assert(SearchMatcher.matches("设置", "com.android.settings", "sz", fakePinyin))
+        assert(!SearchMatcher.matches("微信", "com.tencent.mm", "xj", fakePinyin))
+    }
+
+    @Test
+    fun `latin search uses word prefix not substring`() {
+        // ser 只应命中以 ser 开头的单词/段，不能把含 ser 子串的无关项翻出来
+        assert(SearchMatcher.matches("Service", "com.example.service", "ser", fakePinyin))
+        assert(SearchMatcher.matches("User", "com.userapp", "us", fakePinyin))
+        // 这些词里 ser 只是子串（U-ser、con-ser-vice），不应命中
+        assert(!SearchMatcher.matches("User Guide", "com.foo.tools", "ser", fakePinyin))
+        assert(!SearchMatcher.matches("Console", "com.foo.tools", "ser", fakePinyin))
+    }
+
+    @Test
+    fun `Chinese query still matches by substring`() {
+        assert(SearchMatcher.matches("微信支付", "com.tencent.mm", "支付", fakePinyin))
+        assert(!SearchMatcher.matches("微信", "com.tencent.mm", "支付宝", fakePinyin))
+    }
+
+    // ---- 分类嵌套 ----
+    @Test
+    fun `nested categories are hidden from top level`() {
+        val p = UserPrefs(
+            customCategories = listOf("c_child"),
+            categoryLabels = mapOf("c_child" to "系统程序"),
+            categoryParents = mapOf("c_child" to "utility"),
+        )
+        assert(!Categories.topLevel(p).any { it.id == "c_child" })
+        assert(Categories.topLevel(p).any { it.id == "utility" })
+        assertEquals(listOf("c_child"), Categories.childrenOf("utility", p).map { it.id })
+    }
+
+    @Test
+    fun `cycle descendants detected correctly`() {
+        // parents 表示 子->父：b 的父是 a，c 的父是 b，即 a 是 b、c 的祖先
+        val parents = mapOf("b" to "a", "c" to "b")
+        assert(Categories.isDescendant("c", "a", parents)) // c 是 a 的后代
+        assert(Categories.isDescendant("b", "a", parents)) // b 是 a 的后代
+        assert(!Categories.isDescendant("c", "c", parents)) // 自己不是自己的后代
+        assert(!Categories.isDescendant("a", "c", parents)) // a 是祖先，不是 c 的后代
+    }
+
+    @Test
+    fun `nested child entries appear before apps by default`() {
+        val p = UserPrefs(
+            customCategories = listOf("c_child"),
+            categoryLabels = mapOf("c_child" to "系统程序"),
+            categoryParents = mapOf("c_child" to "utility"),
+        )
+        val apps = listOf(
+            app("u1", "工具A", "utility"),
+            app("s1", "浏览器", "c_child"),
+        )
+        val groups = Sorter.groupsWithNested("utility", apps, p)
+        assertEquals("c_child", groups.first().categoryId)
+        assert(groups.first().isChildEntry)
+        assertEquals("utility", groups.last().categoryId)
+        assertEquals(listOf("u1"), groups.last().apps.map { it.packageName })
+    }
+
+    @Test
+    fun `nested child mode back places children after apps`() {
+        val p = UserPrefs(
+            customCategories = listOf("c_child"),
+            categoryLabels = mapOf("c_child" to "系统程序"),
+            categoryParents = mapOf("c_child" to "utility"),
+            nestedChildMode = NestedChildMode.BACK,
+        )
+        val apps = listOf(app("u1", "工具A", "utility"), app("s1", "浏览器", "c_child"))
+        val groups = Sorter.groupsWithNested("utility", apps, p)
+        assertEquals("utility", groups.first().categoryId)
+        assertEquals("c_child", groups.last().categoryId)
+    }
+
+    @Test
+    fun `nesting and search fields survive backup round trip`() {
+        val p = UserPrefs(
+            categoryParents = mapOf("c1" to "utility"),
+            nestedChildMode = NestedChildMode.BACK,
+            nestedChildOrders = mapOf("utility" to listOf("c1")),
+        )
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val decoded = json.decodeFromString<BackupFile>(json.encodeToString(BackupFile(prefs = p))).prefs
+        assertEquals(mapOf("c1" to "utility"), decoded.categoryParents)
+        assertEquals(NestedChildMode.BACK, decoded.nestedChildMode)
+        assertEquals(listOf("c1"), decoded.nestedChildOrders["utility"])
+    }
 }

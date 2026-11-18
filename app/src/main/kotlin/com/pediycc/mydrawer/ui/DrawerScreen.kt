@@ -67,6 +67,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
     var showUsagePrompt by remember { mutableStateOf(false) }
     var categoryReorderOpen by remember { mutableStateOf(false) }
     var appReorderTarget by remember { mutableStateOf<String?>(null) }
+    var nestCategoryTarget by remember { mutableStateOf<String?>(null) }
+    var childReorderTarget by remember { mutableStateOf<String?>(null) }
 
     // 第一次进入且未授予「使用情况访问权限」时提示一次；用户选「暂不」后不再打扰。
     LaunchedEffect(Unit) {
@@ -124,6 +126,9 @@ fun DrawerScreen(vm: DrawerViewModel) {
                             IconButton(onClick = { vm.clearCategoryForSelected() }) {
                                 Icon(Icons.Filled.RemoveCircle, "取消分类（移入未分类）", tint = Color.White)
                             }
+                            IconButton(onClick = { vm.hideSelected() }) {
+                                Icon(Icons.Filled.VisibilityOff, "批量隐藏", tint = Color.White)
+                            }
                             IconButton(onClick = { moveCategoryOpen = true }) {
                                 Icon(Icons.Filled.DriveFileMove, "移动到分类", tint = Color.White)
                             }
@@ -158,7 +163,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
                 val categories = remember(state.prefs, state.apps) {
-                    Categories.orderedFor(state.prefs).filter { cat ->
+                    // 2.7.0：只显示顶层分类；嵌套子分类不占分类栏，改在父分类内容里作为入口。
+                    Categories.topLevel(state.prefs).filter { cat ->
                         // 「未分类」没有应用时自动隐藏，出现未分类应用时自动显示。
                         cat.id != Categories.OTHER || vm.otherHasApps(state.prefs, state.apps)
                     }
@@ -176,13 +182,13 @@ fun DrawerScreen(vm: DrawerViewModel) {
                 }
                 if (state.prefs.leftHanded) {
                     Box(Modifier.weight(1f)) {
-                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
+                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onChildMenu = { menuCategory = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
                     }
                     rail()
                 } else {
                     rail()
                     Box(Modifier.weight(1f)) {
-                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
+                        AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onChildMenu = { menuCategory = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
                     }
                 }
             }
@@ -201,7 +207,7 @@ fun DrawerScreen(vm: DrawerViewModel) {
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Text(
-                        "点击应用选择 · 右上角箭头移动到分类 / 减号取消分类",
+                        "点击应用选择 · 右上角箭头移动 / 减号取消分类 / 眼睛隐藏",
                         color = Color.White,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -252,6 +258,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
             onDelete = { vm.deleteCategory(id); menuCategory = null },
             onReorderSort = { categoryReorderOpen = true; menuCategory = null },
             onReorderApps = { appReorderTarget = id; menuCategory = null },
+            onNest = { nestCategoryTarget = id; menuCategory = null },
+            onReorderChildren = { childReorderTarget = id; menuCategory = null },
         )
     }
 
@@ -269,6 +277,24 @@ fun DrawerScreen(vm: DrawerViewModel) {
             vm = vm,
             prefs = state.prefs,
             onDismiss = { appReorderTarget = null },
+        )
+    }
+
+    nestCategoryTarget?.let { id ->
+        NestCategoryDialog(
+            childId = id,
+            vm = vm,
+            prefs = state.prefs,
+            onDismiss = { nestCategoryTarget = null },
+        )
+    }
+
+    childReorderTarget?.let { id ->
+        NestedChildReorderDialog(
+            parentId = id,
+            vm = vm,
+            prefs = state.prefs,
+            onDismiss = { childReorderTarget = null },
         )
     }
 
@@ -348,7 +374,8 @@ fun DrawerScreen(vm: DrawerViewModel) {
     // 弹窗/底部菜单自己处理返回键，这里不要抢；只有设置页和多选需要自己收尾。
     val overlayOpen = menuApp != null || menuCategory != null || moveCategoryOpen ||
         renameAppTarget != null || renameCategoryTarget != null || iconTarget != null || showUpdate ||
-        newCategoryDialog || showUsagePrompt || categoryReorderOpen || appReorderTarget != null
+        newCategoryDialog || showUsagePrompt || categoryReorderOpen || appReorderTarget != null ||
+        nestCategoryTarget != null || childReorderTarget != null
     // 设置页 / 多选都不是独立 Activity：返回键先退出当前这一层，而不是直接退出应用。
     // 放在最后注册，保证优先于主界面的默认返回行为。
     BackHandler(enabled = !overlayOpen && (showSettings || state.selectMode)) {
@@ -366,6 +393,7 @@ private fun AppArea(
     searchOpen: Boolean,
     onSearchToggle: () -> Unit,
     onMenu: (AppInfo) -> Unit,
+    onChildMenu: (String) -> Unit,
     onLaunch: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -411,6 +439,8 @@ private fun AppArea(
                 groups = groups,
                 onMenu = onMenu,
                 onLaunch = onLaunch,
+                onChildCategory = { vm.selectCategory(it) },
+                onChildMenu = { onChildMenu(it) },
             )
         }
     }
@@ -554,9 +584,11 @@ private fun CategoryRail(
 private fun AppGrid(
     vm: DrawerViewModel,
     state: com.pediycc.mydrawer.ui.DrawerUiState,
-    groups: List<Pair<String, List<AppInfo>>>,
+    groups: List<com.pediycc.mydrawer.data.Sorter.NestedGroup>,
     onMenu: (AppInfo) -> Unit,
     onLaunch: (String) -> Unit,
+    onChildCategory: (String) -> Unit,
+    onChildMenu: (String) -> Unit,
 ) {
     // 横屏 / 竖屏分别使用各自的列数设置。
     val landscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -566,42 +598,88 @@ private fun AppGrid(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 6.dp),
     ) {
-        groups.forEach { (catId, apps) ->
-            stickyHeader {
-                Text(
-                    vm.categoryLabel(catId),
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    style = WallpaperTextShadowStyle,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(DrawerColors.GroupHeader)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-            val rows = apps.chunked(columns)
-            items(rows) { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                    row.forEach { app ->
-                        AppTile(
-                            app = app,
-                            vm = vm,
-                            state = state,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                if (state.selectMode) vm.toggleSelected(app.packageName)
-                                else onLaunch(app.packageName)
-                            },
-                            onLongClick = {
-                                if (state.selectMode) vm.toggleSelected(app.packageName)
-                                else onMenu(app)
-                            },
-                        )
+        groups.forEach { group ->
+            if (group.isChildEntry) {
+                // 嵌套子分类：画成一个可点进、可长按管理的分类入口条。
+                item(key = "child:${group.categoryId}") {
+                    ChildCategoryTile(
+                        label = vm.categoryLabel(group.categoryId),
+                        vm = vm,
+                        categoryId = group.categoryId,
+                        onClick = { onChildCategory(group.categoryId) },
+                        onLongClick = { onChildMenu(group.categoryId) },
+                    )
+                }
+            } else {
+                stickyHeader(key = "header:${group.categoryId}") {
+                    Text(
+                        vm.categoryLabel(group.categoryId),
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        style = WallpaperTextShadowStyle,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(DrawerColors.GroupHeader)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+                val rows = group.apps.chunked(columns)
+                items(rows) { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        row.forEach { app ->
+                            AppTile(
+                                app = app,
+                                vm = vm,
+                                state = state,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    if (state.selectMode) vm.toggleSelected(app.packageName)
+                                    else onLaunch(app.packageName)
+                                },
+                                onLongClick = {
+                                    if (state.selectMode) vm.toggleSelected(app.packageName)
+                                    else onMenu(app)
+                                },
+                            )
+                        }
+                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                     }
-                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
+    }
+}
+
+/** 嵌套子分类入口条：带分类图标 + 名称，点进入该分类，长按弹出分类管理菜单。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChildCategoryTile(
+    label: String,
+    vm: DrawerViewModel,
+    categoryId: String,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(DrawerColors.GroupHeader, MaterialTheme.shapes.small)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DrawerIcon(
+            key = vm.categoryIconKey(categoryId),
+            fallbackVector = BuiltInIcons.vectorOf(vm.categoryIconKey(categoryId)),
+            size = 30.dp,
+            contentDescription = null,
+            colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(categoryId)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(label, color = Color.White, fontSize = 14.sp, style = WallpaperTextShadowStyle)
+        Spacer(Modifier.weight(1f))
+        Icon(Icons.Filled.KeyboardArrowRight, "进入子分类", tint = DrawerColors.DialogSecondary)
     }
 }
 

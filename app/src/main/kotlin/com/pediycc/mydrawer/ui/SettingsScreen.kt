@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.pediycc.mydrawer.BuildConfig
 import com.pediycc.mydrawer.data.Categories
+import com.pediycc.mydrawer.data.NestedChildMode
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UsageStatsHelper
@@ -183,7 +184,11 @@ fun SettingsScreen(
             item {
                 SettingsRow(
                     title = "显示系统应用",
-                    subtitle = "是否在抽屉中列出系统应用",
+                    subtitle = if (prefs.showSystemApps) {
+                        "已显示无启动入口的系统进程（系统抽屉里看不到的那些）"
+                    } else {
+                        "浏览器 / 商店等可见系统应用始终列出；此处只控制无入口的系统进程"
+                    },
                     icon = Icons.Filled.Android,
                     onClick = { vm.setShowSystemApps(!prefs.showSystemApps) },
                     trailing = {
@@ -231,6 +236,16 @@ fun SettingsScreen(
                     options = startupOptions,
                     selected = prefs.startupCategory,
                     onSelect = { vm.setStartupCategory(it) },
+                )
+            }
+            item {
+                ListSettingsRow(
+                    title = "子分类位置",
+                    subtitle = NestedChildMode.labelOf(prefs.nestedChildMode),
+                    icon = Icons.Filled.Folder,
+                    options = NestedChildMode.LABELS,
+                    selected = prefs.nestedChildMode,
+                    onSelect = { vm.setNestedChildMode(it) },
                 )
             }
             item {

@@ -102,9 +102,13 @@ fun CategoryMenuSheet(
     onDelete: () -> Unit,
     onReorderSort: () -> Unit,
     onReorderApps: () -> Unit,
+    onNest: () -> Unit,
+    onReorderChildren: () -> Unit,
 ) {
     val currentMode = prefs.categorySortModes[categoryId] ?: prefs.sortMode
     val deletable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
+    val nestable = categoryId != Categories.OTHER && categoryId != Categories.FREQUENT
+    val hasChildren = Categories.childrenOf(categoryId, prefs).isNotEmpty()
     val maxList = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
     ThemedDialog(onDismissRequest = onDismiss) {
         Text(
@@ -118,6 +122,12 @@ fun CategoryMenuSheet(
             MenuItem(Icons.Filled.Edit, "重命名分类", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(Icons.Filled.SwapVert, "拖动排序分类", onReorderSort)
+            if (nestable) {
+                MenuItem(Icons.Filled.Folder, "嵌套到其它分类", onNest)
+            }
+            if (hasChildren && currentMode == SortMode.MANUAL) {
+                MenuItem(Icons.Filled.Reorder, "排序子分类", onReorderChildren)
+            }
             if (deletable) {
                 MenuItem(Icons.Filled.Delete, "删除分类", onDelete)
             }
@@ -361,6 +371,96 @@ fun AppReorderDialog(categoryId: String, vm: DrawerViewModel, prefs: UserPrefs, 
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(app?.label ?: pkg, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("完成", color = DrawerColors.Accent) }
+        }
+    }
+}
+
+/** 分类嵌套对话框：把某分类挂到另一个分类下，或移回顶层。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NestCategoryDialog(
+    childId: String,
+    vm: DrawerViewModel,
+    prefs: UserPrefs,
+    onDismiss: () -> Unit,
+) {
+    val candidates = remember(prefs) { Categories.parentCandidates(childId, prefs) }
+    val currentParent = prefs.categoryParents[childId]
+    ThemedDialog(onDismissRequest = onDismiss) {
+        Text("嵌套到分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "选择父分类后，该分类不再单独占用分类栏，而会出现在父分类里。",
+            color = DrawerColors.DialogSecondary,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            if (!currentParent.isNullOrBlank()) {
+                ListItem(
+                    headlineContent = { Text("移回顶层（取消嵌套）", color = Color(0xFFFFE082)) },
+                    leadingContent = { Icon(Icons.Filled.ArrowUpward, null, tint = Color(0xFFFFE082)) },
+                    modifier = Modifier.clickable { vm.setCategoryParent(childId, ""); onDismiss() },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            candidates.forEach { cat ->
+                ListItem(
+                    headlineContent = { Text(vm.categoryLabel(cat.id), color = Color.White) },
+                    leadingContent = { Icon(Icons.Filled.Folder, null, tint = Color(0xFFBFD4FF)) },
+                    trailingContent = {
+                        if (cat.id == currentParent) Icon(Icons.Filled.CheckCircle, null, tint = DrawerColors.Accent)
+                    },
+                    modifier = Modifier.clickable { vm.setCategoryParent(childId, cat.id); onDismiss() },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+        }
+    }
+}
+
+/** 父分类内「子分类」手动排序对话框：按住右侧双横条调整子分类之间的顺序。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NestedChildReorderDialog(
+    parentId: String,
+    vm: DrawerViewModel,
+    prefs: UserPrefs,
+    onDismiss: () -> Unit,
+) {
+    val children = remember(prefs) { Categories.childrenOf(parentId, prefs) }
+    ThemedDialog(onDismissRequest = onDismiss, horizontalPadding = 12.dp) {
+        Text("排序子分类 · ${vm.categoryLabel(parentId)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(6.dp))
+        Text("按住右侧横条调整子分类顺序；仅在本分类手动排序时生效。", color = DrawerColors.DialogSecondary, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
+            DragReorderList(
+                items = children,
+                keyOf = { it.id },
+                rowHeight = 56.dp,
+                onReorder = { from, to -> vm.reorderNestedChild(parentId, from, to) },
+            ) { cat, _ ->
+                Row(Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    DrawerIcon(
+                        key = vm.categoryIconKey(cat.id),
+                        fallbackVector = BuiltInIcons.vectorOf(vm.categoryIconKey(cat.id)),
+                        size = 30.dp,
+                        contentDescription = null,
+                        colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(cat.id)),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(vm.categoryLabel(cat.id), color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
                 }
             }
         }

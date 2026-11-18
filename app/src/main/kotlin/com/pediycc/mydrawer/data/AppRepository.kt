@@ -20,7 +20,10 @@ class AppRepository(
         for (pkg in packages) {
             val appInfo: ApplicationInfo = pkg.applicationInfo ?: continue
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-            if (isSystem && !prefs.current.showSystemApps) continue
+            // 系统应用里「有启动入口」的（浏览器 / 应用商店 / 相机等）在原生系统抽屉里本就可见，
+            // 属于普通应用，始终列出；「显示系统应用」只控制那些无入口的纯系统进程。
+            val hasLauncher = pm.getLaunchIntentForPackage(pkg.packageName) != null
+            if (isSystem && !hasLauncher && !prefs.current.showSystemApps) continue
 
             val label = prefs.current.appLabels[pkg.packageName]
                 ?: runCatching { appInfo.loadLabel(pm).toString() }
@@ -38,6 +41,7 @@ class AppRepository(
                 isSystem = isSystem,
                 categoryId = categoryId,
                 installTime = pkg.firstInstallTime,
+                hasLauncher = hasLauncher,
             )
         }
         result
