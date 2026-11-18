@@ -25,6 +25,10 @@ data class CategoryRule(
     val categoryId: String,
 )
 
+/** 应用是否属于某分类：主分类，或 2.9.0 起勾选的附加分类（一个应用可出现在多个分类里）。 */
+fun AppInfo.inCategory(categoryId: String, extras: Map<String, Set<String>>): Boolean =
+    this.categoryId == categoryId || categoryId in (extras[packageName] ?: emptySet())
+
 /** 分类定义。id 与原版 fC 值保持一致，便于复用规则表；iconKey 为内置图库键。 */
 data class CategoryDef(
     val id: String,
@@ -178,4 +182,63 @@ object Categories {
     /** 剔除返回栈里已经失效（被删除）的分类，避免退回到空白视图。 */
     fun sanitizeTrail(trail: List<String>, validIds: Set<String>): List<String> =
         trail.filter { it in validIds }
+
+    // ---- 2.9.0 多分类 / 固定末位（纯函数，便于单测） ----
+
+    /**
+     * 勾选 / 取消勾选某分类后的成员集合，返回新的 (主分类, 附加分类)。
+     * 「未分类」只是兜底：从未分类勾选第一个分类时直接把它转为主分类（等同移动到分类）；
+     * 取消主分类时，若有附加分类则顺延一个为主分类，否则回落到「未分类」。
+     */
+    fun toggleMembership(
+        primary: String,
+        extras: Set<String>,
+        catId: String,
+    ): Pair<String, Set<String>> {
+        val isMember = primary == catId || catId in extras
+        return if (isMember) {
+            if (primary == catId) {
+                val rest = extras - catId
+                val np = rest.firstOrNull() ?: OTHER
+                np to (rest - np)
+            } else {
+                primary to (extras - catId)
+            }
+        } else {
+            if (primary == OTHER && extras.isEmpty()) catId to extras
+            else primary to (extras + catId)
+        }
+    }
+
+    /**
+     * 批量勾选：把成员集合精确设为 [checked]（按勾选顺序）。
+     * 原主分类还在勾选里就保持不动，否则顺延勾选里的第一个；没勾任何分类则归入「未分类」。
+     */
+    fun withMemberships(
+        primary: String,
+        checked: List<String>,
+    ): Pair<String, Set<String>> {
+        if (checked.isEmpty()) return OTHER to emptySet()
+        val newPrimary = if (primary in checked) primary else checked.first()
+        return newPrimary to checked.filter { it != newPrimary }.toSet()
+    }
+
+    /**
+     * 拖动排序后把固定项（「未分类」）放回最后：它只从 [ids] 里挪动其余项，
+     * [from]/[to] 是去掉固定项后的下标；越界或原地不动时返回原样。
+     */
+    fun reorderKeepingLast(
+        ids: List<String>,
+        from: Int,
+        to: Int,
+        pinnedId: String = OTHER,
+    ): List<String> {
+        val rest = ids.filterNot { it == pinnedId }
+        if (from !in rest.indices || to !in rest.indices || from == to) return ids
+        val out = rest.toMutableList()
+        val moved = out.removeAt(from)
+        out.add(to, moved)
+        val pinned = ids.filter { it == pinnedId }
+        return if (pinned.isEmpty()) out else out + pinned
+    }
 }

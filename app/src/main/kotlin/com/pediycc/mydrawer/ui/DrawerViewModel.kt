@@ -25,6 +25,7 @@ import com.pediycc.mydrawer.data.Sorter
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UsageStatsHelper
 import com.pediycc.mydrawer.data.UserPrefs
+import com.pediycc.mydrawer.data.inCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -279,6 +280,42 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         notify("分类已更改")
     }
 
+    /**
+     * 2.9.0 勾选式多分类：切换应用在某分类里的归属（勾上加入、取消移出）。
+     * 主分类缺失时顺延附加分类，全部取消则归入「未分类」；同一个应用可在多个分类中出现。
+     */
+    fun toggleAppCategory(packageName: String, catId: String) {
+        val app = _ui.value.apps.firstOrNull { it.packageName == packageName } ?: return
+        prefs.toggleAppCategory(packageName, app.categoryId, catId)
+        refresh()
+    }
+
+    /** 2.9.0 批量勾选（多选模式）：把选中应用的归属精确设为 [checked]（按勾选顺序）。 */
+    fun applyCategoriesToSelected(checked: List<String>) {
+        val ids = _ui.value.selected
+        if (ids.isEmpty()) {
+            notify("请先选择应用")
+            return
+        }
+        prefs.setAppMemberships(ids, checked)
+        _ui.value = _ui.value.copy(selectMode = false, selected = emptySet())
+        refresh()
+        notify(
+            if (checked.isEmpty()) "已将 ${ids.size} 个应用移入「未分类」"
+            else "已更新 ${ids.size} 个应用的所属分类"
+        )
+    }
+
+    /** 长按菜单「卸载应用」：拉起系统卸载确认界面。 */
+    fun uninstall(packageName: String) {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure { notify("无法启动卸载界面") }
+    }
+
     fun renameApp(packageName: String, label: String) {
         prefs.renameApp(packageName, label.trim())
         refresh()
@@ -364,13 +401,12 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
-    /** 拖拽排序：把 [fromIndex] 处的分类移到 [toIndex]（均按 orderedFor 的完整列表下标）。 */
+    /** 拖拽排序：把 [fromIndex] 处的分类移到 [toIndex]；「未分类」固定排在最后，不参与换位。 */
     fun reorderCategory(fromIndex: Int, toIndex: Int) {
-        val ids = Categories.orderedFor(prefs.current).map { it.id }.toMutableList()
-        if (fromIndex !in ids.indices || toIndex !in ids.indices || fromIndex == toIndex) return
-        val id = ids.removeAt(fromIndex)
-        ids.add(toIndex, id)
-        prefs.update { it.copy(categoryOrder = ids) }
+        val ids = Categories.orderedFor(prefs.current).map { it.id }
+        val next = Categories.reorderKeepingLast(ids, fromIndex, toIndex)
+        if (next == ids) return
+        prefs.update { it.copy(categoryOrder = next) }
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 
@@ -505,7 +541,7 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun otherHasApps(p: UserPrefs = prefs.current, apps: List<AppInfo> = _ui.value.apps): Boolean {
         val visible = apps.filterNot { it.packageName in p.hiddenPackages }
-        return visible.any { it.categoryId == Categories.OTHER }
+        return visible.any { it.inCategory(Categories.OTHER, p.categoryExtras) }
     }
 
     /** 首次进入时的使用频率授权提示，标记后不再重复。 */
@@ -810,7 +846,8 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             apps = apps.filter { (counts[it.packageName] ?: 0) > 0 }
         } else if (s.selectedCategory != "all") {
             // 选中某个分类时，子分类的应用不算它自己的，点进子分类才显示。
-            apps = apps.filter { it.categoryId == s.selectedCategory }
+            // 2.9.0 多分类：附加归属也算该分类的成员。
+            apps = apps.filter { it.inCategory(s.selectedCategory, s.prefs.categoryExtras) }
         }
         return Sorter.groupsWithNested(s.selectedCategory, apps, s.prefs, s.usageCounts)
             .filter { it.apps.isNotEmpty() || it.isChildEntry }
@@ -827,10 +864,10 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         val counts = if (s.usageCounts.isNotEmpty()) s.usageCounts else s.prefs.launchCounts
         return when (categoryId) {
             "all" -> visible.size
-            // 「最常用」只列前 10，计数不能跟着全量使用记录走。
+            // 「最常用」只列前 N（可在设置自定义），计数不能跟着全量使用记录走。
             Categories.FREQUENT -> visible.count { (counts[it.packageName] ?: 0) > 0 }
-                .coerceAtMost(Sorter.FREQUENT_LIMIT)
-            else -> visible.count { it.categoryId == categoryId }
+                .coerceAtMost(s.prefs.frequentLimit.coerceAtLeast(1))
+            else -> visible.count { it.inCategory(categoryId, s.prefs.categoryExtras) }
         }
     }
 

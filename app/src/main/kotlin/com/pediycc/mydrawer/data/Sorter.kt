@@ -5,20 +5,20 @@ import java.util.Locale
 
 /** 应用排序：中文按拼音序，包名兜底保证稳定。 */
 object Sorter {
-    /** 「最常用」固定只列前 N 个高频应用（与原版一致），任何排序方式都不能突破。 */
+    /** 「最常用」默认只列前 10 个高频应用（与原版一致）；2.9.0 起数量可在设置里自定义。 */
     const val FREQUENT_LIMIT = 10
 
     private val collator = Collator.getInstance(Locale.CHINA).apply {
         strength = Collator.SECONDARY
     }
 
-    /** 按使用频次降序取前 [FREQUENT_LIMIT] 个；同频按名称、包名保证稳定。 */
-    private fun topByUsage(list: List<AppInfo>, counts: Map<String, Int>): List<AppInfo> =
+    /** 按使用频次降序取前 [limit] 个；同频按名称、包名保证稳定。 */
+    private fun topByUsage(list: List<AppInfo>, counts: Map<String, Int>, limit: Int): List<AppInfo> =
         list.sortedWith(
             compareByDescending<AppInfo> { counts[it.packageName] ?: 0 }
                 .then { a, b -> collator.compare(a.label, b.label) }
                 .thenBy { it.packageName },
-        ).take(FREQUENT_LIMIT)
+        ).take(limit.coerceAtLeast(1))
 
     fun sort(
         apps: List<AppInfo>,
@@ -61,11 +61,13 @@ object Sorter {
         // 有系统统计就以系统为准；没授权/没数据才用 MyDrawer 自己的启动次数。
         val counts = if (usageCounts.isNotEmpty()) usageCounts else prefs.launchCounts
         val categories = Categories.orderedFor(prefs)
+        val limit = prefs.frequentLimit
         return categories.mapNotNull { cat ->
             val inCat: List<AppInfo> = if (cat.id == Categories.FREQUENT) {
-                topByUsage(apps.filter { (counts[it.packageName] ?: 0) > 0 }, counts)
+                topByUsage(apps.filter { (counts[it.packageName] ?: 0) > 0 }, counts, limit)
             } else {
-                apps.filter { it.categoryId == cat.id }
+                // 2.9.0 多分类：附加归属也计入该分类分组。
+                apps.filter { it.inCategory(cat.id, prefs.categoryExtras) }
             }
             if (inCat.isEmpty()) null else if (cat.id == Categories.FREQUENT) {
                 // 最常用分类本身已按使用频次排好并截取前 10，不能再被全局排序方式打乱。
@@ -110,9 +112,13 @@ object Sorter {
         val counts = if (usageCounts.isNotEmpty()) usageCounts else prefs.launchCounts
 
         fun sortOf(catId: String, list: List<AppInfo>): List<AppInfo> {
-            // 最常用先截到前 10，再决定展示顺序：即使给「最常用」单独选过排序方式，
+            // 最常用先截到前 N（可在设置自定义），再决定展示顺序：即使给「最常用」单独选过排序方式，
             // 也不能把全部有使用记录的应用列出来（旧实现漏了这一步，会列出上百个）。
-            val base = if (catId == Categories.FREQUENT) topByUsage(list, counts) else list
+            val base = if (catId == Categories.FREQUENT) {
+                topByUsage(list, counts, prefs.frequentLimit)
+            } else {
+                list
+            }
             val explicit = prefs.categorySortModes[catId]
             if (catId == Categories.FREQUENT && explicit == null) return base
             val mode = explicit ?: prefs.sortMode
@@ -126,8 +132,9 @@ object Sorter {
             }
             "all" -> {
                 // 「全部」：每个分类各成一组，按分类顺序；嵌套子分类也单独成组便于查看。
+                // 2.9.0 多分类：同一应用归属多个分类时会在各组里都出现。
                 Categories.orderedFor(prefs).flatMap { cat ->
-                    val inCat = apps.filter { it.categoryId == cat.id }
+                    val inCat = apps.filter { it.inCategory(cat.id, prefs.categoryExtras) }
                     if (inCat.isNotEmpty()) listOf(NestedGroup(cat.id, sortOf(cat.id, inCat))) else emptyList()
                 }
             }
@@ -136,7 +143,7 @@ object Sorter {
                 // 应用用本分类自己的排序规则，二者互不影响。点进子分类再按子分类规则显示其内部。
                 val children = Categories.childrenOf(categoryId, prefs)
                     .map { NestedGroup(it.id, emptyList(), isChildEntry = true) }
-                val ownApps = apps.filter { it.categoryId == categoryId }
+                val ownApps = apps.filter { it.inCategory(categoryId, prefs.categoryExtras) }
                 val own = if (ownApps.isNotEmpty()) listOf(NestedGroup(categoryId, sortOf(categoryId, ownApps))) else emptyList()
                 if (prefs.nestedChildMode == NestedChildMode.BACK) own + children else children + own
             }
@@ -148,9 +155,9 @@ object Sorter {
         val inCat = if (categoryId == Categories.FREQUENT) {
             apps.filter { (prefs.launchCounts[it.packageName] ?: 0) > 0 }
                 .sortedByDescending { prefs.launchCounts[it.packageName] ?: 0 }
-                .take(FREQUENT_LIMIT)
+                .take(prefs.frequentLimit.coerceAtLeast(1))
         } else {
-            apps.filter { it.categoryId == categoryId }
+            apps.filter { it.inCategory(categoryId, prefs.categoryExtras) }
         }
         return sort(
             inCat,

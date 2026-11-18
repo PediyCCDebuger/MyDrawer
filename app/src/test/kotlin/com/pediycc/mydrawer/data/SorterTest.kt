@@ -380,4 +380,85 @@ class SorterTest {
         )
         assert(Categories.topLevel(p).any { it.id == "c_child" })
     }
+
+    // ---- 2.9.0 多分类 / 未分类固定末位 ----
+
+    @Test
+    fun `checking a category from other makes it the primary`() {
+        val (primary, extras) = Categories.toggleMembership("other", emptySet(), "games")
+        assertEquals("games", primary)
+        assertEquals(emptySet<String>(), extras)
+    }
+
+    @Test
+    fun `checking an extra category keeps the primary`() {
+        val (primary, extras) = Categories.toggleMembership("utility", emptySet(), "internet")
+        assertEquals("utility", primary)
+        assertEquals(setOf("internet"), extras)
+    }
+
+    @Test
+    fun `unchecking the primary falls back to an extra then other`() {
+        val (p1, e1) = Categories.toggleMembership("utility", setOf("internet"), "utility")
+        assertEquals("internet", p1)
+        assertEquals(emptySet<String>(), e1)
+        val (p2, e2) = Categories.toggleMembership("utility", emptySet(), "utility")
+        assertEquals("other", p2)
+        assertEquals(emptySet<String>(), e2)
+    }
+
+    @Test
+    fun `unchecking an extra keeps the primary`() {
+        val (primary, extras) = Categories.toggleMembership("utility", setOf("internet", "media"), "internet")
+        assertEquals("utility", primary)
+        assertEquals(setOf("media"), extras)
+    }
+
+    @Test
+    fun `app counts as member of both primary and extra categories`() {
+        val a = app("store", "商店", "utility")
+        assert(a.inCategory("utility", mapOf("store" to setOf("internet"))))
+        assert(a.inCategory("internet", mapOf("store" to setOf("internet"))))
+        assert(!a.inCategory("games", mapOf("store" to setOf("internet"))))
+    }
+
+    @Test
+    fun `grouping shows an app in every category it belongs to`() {
+        val p = UserPrefs(categoryExtras = mapOf("store" to setOf("internet")))
+        val apps = listOf(app("store", "商店", "utility"))
+        val ids = Sorter.groupsWithNested("all", apps, p).map { it.categoryId }
+        assertEquals(listOf("internet", "utility"), ids.sorted())
+    }
+
+    @Test
+    fun `batch memberships keep the primary when still checked`() {
+        val (primary, extras) = Categories.withMemberships("utility", listOf("internet", "utility", "media"))
+        assertEquals("utility", primary)
+        assertEquals(setOf("internet", "media"), extras)
+        val (p2, e2) = Categories.withMemberships("utility", listOf("internet", "games"))
+        assertEquals("internet", p2)
+        assertEquals(setOf("games"), e2)
+        val (p3, e3) = Categories.withMemberships("utility", emptyList())
+        assertEquals("other", p3)
+        assertEquals(emptySet<String>(), e3)
+    }
+
+    @Test
+    fun `reorder keeps uncategorized pinned last`() {
+        val ids = listOf("games", "utility", "other", "media")
+        // from/to 是去掉「未分类」后的下标：把下标 1（utility）拖到末尾（media 位置）。
+        val next = Categories.reorderKeepingLast(ids, 1, 2)
+        assertEquals(listOf("games", "media", "utility", "other"), next)
+        // 原地不动 / 越界返回原样。
+        assertEquals(ids, Categories.reorderKeepingLast(ids, 1, 1))
+        assertEquals(ids, Categories.reorderKeepingLast(ids, 9, 0))
+    }
+
+    @Test
+    fun `frequent limit follows the user preference`() {
+        val p = UserPrefs(launchCounts = mapOf("a" to 5, "b" to 4, "c" to 3, "d" to 2), frequentLimit = 2)
+        val apps = listOf(app("a", "A"), app("b", "B"), app("c", "C"), app("d", "D"))
+        val group = Sorter.groupsWithNested("frequent", apps, p).first()
+        assertEquals(listOf("a", "b"), group.apps.map { it.packageName })
+    }
 }

@@ -48,9 +48,10 @@ fun AppMenuSheet(
     onDismiss: () -> Unit,
     onLaunch: () -> Unit,
     onDetails: () -> Unit,
+    onUninstall: () -> Unit,
     onPinToHome: () -> Unit,
     onToggleHidden: () -> Unit,
-    onSetCategory: (String) -> Unit,
+    onToggleCategory: (String) -> Unit,
     onClearCategory: () -> Unit,
     onRename: () -> Unit,
     onIcon: () -> Unit,
@@ -58,6 +59,9 @@ fun AppMenuSheet(
 ) {
     // 限高并允许滚动，短屏/横屏也不溢出；列表超出一屏时正常滚动，点击始终有效。
     val maxList = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+    // 2.9.0 多分类：勾选状态 = 主分类或附加归属之一；切换后不关菜单，可连续勾选多个。
+    val extras = prefs.categoryExtras[app.packageName] ?: emptySet()
+    fun memberOf(catId: String) = app.categoryId == catId || catId in extras
     ThemedDialog(onDismissRequest = onDismiss) {
         Text(app.label, style = MaterialTheme.typography.titleMedium, color = Color.White)
         Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = DrawerColors.DialogSecondary)
@@ -66,6 +70,7 @@ fun AppMenuSheet(
             MenuItem(Icons.Filled.Launch, "启动应用", onLaunch)
             MenuItem(Icons.Filled.Checklist, "多选", onMultiSelect)
             MenuItem(Icons.Filled.Info, "属性", onDetails)
+            MenuItem(Icons.Filled.Delete, "卸载应用", onUninstall)
             MenuItem(Icons.Filled.AddToHomeScreen, "发送到桌面", onPinToHome)
             MenuItem(Icons.Filled.Edit, "重命名", onRename)
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
@@ -74,17 +79,21 @@ fun AppMenuSheet(
                 if (app.packageName in prefs.hiddenPackages) "取消隐藏" else "隐藏应用",
                 onToggleHidden,
             )
-            if (app.categoryId != Categories.OTHER) {
-                MenuItem(Icons.Filled.RemoveCircle, "取消分类（移入未分类）", onClearCategory)
-            }
             Spacer(Modifier.height(8.dp))
-            Text("移动到分类", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
+            Text("所属分类（可勾选多个）", style = MaterialTheme.typography.labelLarge, color = DrawerColors.Accent)
+            // 2.9.0：勾选方式——勾上加进该分类、取消勾出，未全部取消时可多分类同时归属；
+            // 「未分类」固定排最后。
             Categories.moveTargets(prefs).forEach { cat ->
+                val checked = memberOf(cat.id)
                 MenuItem(
-                    if (cat.id == app.categoryId) Icons.Filled.CheckCircle else Icons.Filled.ArrowForward,
+                    if (checked) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
                     prefs.categoryLabels[cat.id] ?: cat.label,
-                    { onSetCategory(cat.id) },
+                    { onToggleCategory(cat.id) },
                 )
+            }
+            if (app.categoryId != Categories.OTHER || extras.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                MenuItem(Icons.Filled.RemoveCircle, "取消全部分类（移入未分类）", onClearCategory)
             }
         }
     }
@@ -129,7 +138,7 @@ fun CategoryMenuSheet(
             MenuItem(Icons.Filled.PhotoCamera, "更改图标", onIcon)
             MenuItem(Icons.Filled.SwapVert, "拖动排序分类", onReorderSort)
             if (nestable) {
-                MenuItem(Icons.Filled.Folder, "嵌套到其它分类", onNest)
+                MenuItem(Icons.Filled.Folder, "移动到其它分类", onNest)
             }
             if (hasChildren && currentMode == SortMode.MANUAL) {
                 MenuItem(Icons.Filled.Reorder, "排序子分类", onReorderChildren)
@@ -281,29 +290,65 @@ private fun MenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text
 @Composable
 fun MoveDialog(
     categories: List<CategoryDef>,
+    selectedPackages: Set<String>,
+    memberOf: (packageName: String, categoryId: String) -> Boolean,
     labelOf: (String) -> String,
     onDismiss: () -> Unit,
-    onPick: (String) -> Unit,
+    onApply: (checkedIds: List<String>) -> Unit,
 ) {
+    // 2.9.0 勾选式：勾选 = 加入所选应用的所属分类，取消勾选 = 从该分类移出；
+    // 全部勾选状态按「所有选中应用都已归属」判断，确定后按勾选顺序精确写入。
+    val initialChecked = categories
+        .filter { selectedPackages.isNotEmpty() && selectedPackages.all { pkg -> memberOf(pkg, it.id) } }
+        .map { it.id }
+        .toSet()
+    var checked by remember { mutableStateOf(initialChecked) }
     ThemedDialog(onDismissRequest = onDismiss) {
-        Text("移动到分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Spacer(Modifier.height(12.dp))
+        Text(
+            "所属分类（已选 ${selectedPackages.size} 个应用）",
+            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "勾选加入、取消勾选移出；同一应用可同时归属多个分类，全部取消则归入「未分类」。",
+            color = DrawerColors.DialogSecondary,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(10.dp))
         Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
             // 「未分类」固定排最后：它是兜底项，新建分类不会插在它后面。
             categories
                 .filter { it.id != Categories.FREQUENT }
                 .sortedBy { if (it.id == Categories.OTHER) 1 else 0 }
                 .forEach { cat ->
-                    ListItem(
-                        headlineContent = { Text(labelOf(cat.id), color = Color.White) },
-                        modifier = Modifier.clickable { onPick(cat.id) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
+                    val on = cat.id in checked
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                checked = if (on) checked - cat.id else checked + cat.id
+                            }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = on, onCheckedChange = {
+                            checked = if (on) checked - cat.id else checked + cat.id
+                        }, colors = androidx.compose.material3.CheckboxDefaults.colors(
+                            checkedColor = DrawerColors.Accent,
+                            uncheckedColor = Color(0x88FFFFFF),
+                            checkmarkColor = Color.Black,
+                        ))
+                        Text(labelOf(cat.id), color = Color.White)
+                    }
                 }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onDismiss) { Text("取消", color = DrawerColors.DialogText) }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = { onApply(categories.filter { it.id in checked }.map { it.id }) }) {
+                Text("确定", color = DrawerColors.Accent)
+            }
         }
     }
 }
@@ -312,7 +357,13 @@ fun MoveDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -> Unit) {
-    val cats = remember(prefs) { Categories.orderedFor(prefs) }
+    // 「未分类」固定在最后，不参与拖动：只列出可拖动的分类。
+    val cats = remember(prefs) { Categories.orderedFor(prefs).filter { it.id != Categories.OTHER } }
+    val otherLabel = remember(prefs) {
+        Categories.orderedFor(prefs).firstOrNull { it.id == Categories.OTHER }?.let {
+            prefs.categoryLabels[it.id] ?: it.label
+        } ?: "未分类"
+    }
     // 窗口加大：更宽的左右边距 + 按屏幕高度给出更大的列表上限（横屏/短屏自动收敛）。
     val reorderMax = (LocalConfiguration.current.screenHeightDp * 0.82f).dp
     ThemedDialog(onDismissRequest = onDismiss, horizontalPadding = 12.dp) {
@@ -341,6 +392,23 @@ fun CategoryReorderDialog(vm: DrawerViewModel, prefs: UserPrefs, onDismiss: () -
                     Spacer(Modifier.width(10.dp))
                     Text(vm.categoryLabel(cat.id), color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
                 }
+            }
+            // 「未分类」固定末位：展示为不可拖动的一行。
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DrawerIcon(
+                    key = vm.categoryIconKey(Categories.OTHER),
+                    fallbackVector = BuiltInIcons.vectorOf(Categories.iconKeyOf(Categories.OTHER)),
+                    size = 30.dp,
+                    contentDescription = null,
+                    colorTint = BuiltInIcons.colorOf(vm.categoryIconKey(Categories.OTHER)),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(otherLabel, color = Color(0xFFBDBDBD), modifier = Modifier.weight(1f), maxLines = 1)
+                Text("固定在最后", color = Color(0xFF8A8A8A), fontSize = 12.sp)
+                Spacer(Modifier.width(48.dp))
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -391,7 +459,7 @@ fun AppReorderDialog(categoryId: String, vm: DrawerViewModel, prefs: UserPrefs, 
     }
 }
 
-/** 分类嵌套对话框：把某分类挂到另一个分类下，或移回顶层。 */
+/** 分类移动对话框：把某分类挂到另一个分类下成为子分类，或移回顶层。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NestCategoryDialog(
@@ -403,10 +471,10 @@ fun NestCategoryDialog(
     val candidates = remember(prefs) { Categories.parentCandidates(childId, prefs) }
     val currentParent = prefs.categoryParents[childId]
     ThemedDialog(onDismissRequest = onDismiss) {
-        Text("嵌套到分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("移动到分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
         Text(
-            "选择父分类后，该分类不再单独占用分类栏，而会出现在父分类里。",
+            "选择目标分类后，该分类不再单独占用分类栏，而会出现在目标分类里成为子分类。",
             color = DrawerColors.DialogSecondary,
             fontSize = 12.sp,
         )
@@ -414,7 +482,7 @@ fun NestCategoryDialog(
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             if (!currentParent.isNullOrBlank()) {
                 ListItem(
-                    headlineContent = { Text("移回顶层（取消嵌套）", color = Color(0xFFFFE082)) },
+                    headlineContent = { Text("移回顶层（取消子分类）", color = Color(0xFFFFE082)) },
                     leadingContent = { Icon(Icons.Filled.ArrowUpward, null, tint = Color(0xFFFFE082)) },
                     modifier = Modifier.clickable { vm.setCategoryParent(childId, ""); onDismiss() },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -467,7 +535,7 @@ fun MoveCategoriesDialog(
         Spacer(Modifier.height(12.dp))
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             ListItem(
-                headlineContent = { Text("移回顶层（取消嵌套）", color = Color(0xFFFFE082)) },
+                headlineContent = { Text("移回顶层（取消子分类）", color = Color(0xFFFFE082)) },
                 leadingContent = { Icon(Icons.Filled.ArrowUpward, null, tint = Color(0xFFFFE082)) },
                 modifier = Modifier.clickable { onPick("") },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),

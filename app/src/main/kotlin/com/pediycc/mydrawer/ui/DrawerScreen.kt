@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,6 +32,7 @@ import com.pediycc.mydrawer.data.Categories
 import com.pediycc.mydrawer.data.SortMode
 import com.pediycc.mydrawer.data.Updater
 import com.pediycc.mydrawer.data.UsageStatsHelper
+import com.pediycc.mydrawer.data.inCategory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -266,16 +269,19 @@ fun DrawerScreen(vm: DrawerViewModel) {
         UpdateDialog(vm = vm, onDismiss = { showUpdate = false })
     }
 
-    menuApp?.let { app ->
+    menuApp?.let { captured ->
+        // 勾选分类后 refresh 会更新应用列表，用最新数据重建条目，勾选状态才不会停留在旧值。
+        val app = state.apps.firstOrNull { it.packageName == captured.packageName } ?: captured
         AppMenuSheet(
             app = app,
             prefs = state.prefs,
             onDismiss = { menuApp = null },
             onLaunch = { launchAndFinish(app.packageName); menuApp = null },
             onDetails = { openAppDetails(app.packageName); menuApp = null },
+            onUninstall = { vm.uninstall(app.packageName); menuApp = null },
             onPinToHome = { vm.pinToHome(app.packageName); menuApp = null },
             onToggleHidden = { vm.toggleHidden(app.packageName); menuApp = null },
-            onSetCategory = { vm.setCategoryOverride(app.packageName, it); menuApp = null },
+            onToggleCategory = { catId -> vm.toggleAppCategory(app.packageName, catId) },
             onClearCategory = { vm.clearCategory(app.packageName); menuApp = null },
             onRename = { renameAppTarget = app; menuApp = null },
             onIcon = { iconTarget = IconTarget.App(app.packageName); menuApp = null },
@@ -415,9 +421,13 @@ fun DrawerScreen(vm: DrawerViewModel) {
     if (moveCategoryOpen) {
         MoveDialog(
             categories = Categories.moveTargets(state.prefs),
+            selectedPackages = state.selected,
+            memberOf = { pkg, catId ->
+                state.apps.firstOrNull { it.packageName == pkg }?.inCategory(catId, state.prefs.categoryExtras) == true
+            },
             labelOf = { vm.categoryLabel(it) },
             onDismiss = { moveCategoryOpen = false },
-            onPick = { vm.moveSelectedTo(it); moveCategoryOpen = false },
+            onApply = { vm.applyCategoriesToSelected(it); moveCategoryOpen = false },
         )
     }
 
@@ -711,6 +721,8 @@ private fun AppGrid(
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 6.dp, bottom = bottomPad),
+        // 2.9.0「应用从底部排列」之前只存了开关没接到界面：内容不足一屏时把列表整体贴底显示。
+        verticalArrangement = if (state.prefs.stackFromBottom) Arrangement.Bottom else Arrangement.Top,
     ) {
         groups.forEach { group ->
             if (group.isChildEntry) {
@@ -835,13 +847,21 @@ private fun AppTile(
         }
         if (state.prefs.showAppLabels) {
             Spacer(Modifier.height(4.dp))
-            Text(
+            // 2.9.0：名称超过 8 个字也能完整显示 —— 用自适应字号在两行内自动缩小，
+            // 而不是固定 12sp 每行只装 4 个字就截断。
+            BasicText(
                 app.label,
-                color = Color.White,
-                fontSize = 12.sp,
-                style = WallpaperTextShadowStyle,
+                style = WallpaperTextShadowStyle.copy(
+                    fontSize = 12.sp,
+                    color = androidx.compose.ui.graphics.Color.White,
+                    textAlign = TextAlign.Center,
+                ),
+                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                    minFontSize = 8.sp,
+                    maxFontSize = 12.sp,
+                    stepSize = 0.5.sp,
+                ),
                 maxLines = 2,
-                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

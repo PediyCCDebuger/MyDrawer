@@ -308,10 +308,21 @@ fun SettingsScreen(
             item {
                 SwitchRow(
                     title = "最常用分类",
-                    subtitle = "按本机真实使用频率排列最常用的 10 个应用，默认排在分类栏最前",
+                    subtitle = "按本机真实使用频率排列最常用的应用（数量可在下一行自定义），默认排在分类栏最前",
                     icon = Icons.Filled.Star,
                     checked = prefs.frequentEnabled,
                     onCheckedChange = { v -> vm.setFrequentEnabled(v) },
+                )
+            }
+            item {
+                // 2.9.0：「最常用」显示数量可手动输入；上限按本机有使用记录的应用数确定，
+                // 数量再大也只是截断到有记录的应用，故提示里直接给出当前系统下的最大值。
+                val counts = if (ui.usageCounts.isNotEmpty()) ui.usageCounts else prefs.launchCounts
+                val maxAllowed = counts.size.coerceIn(1, 200)
+                FrequentLimitRow(
+                    value = prefs.frequentLimit,
+                    maxAllowed = maxAllowed,
+                    onValue = { v -> vm.updatePrefs { it.copy(frequentLimit = v) } },
                 )
             }
             item {
@@ -585,6 +596,63 @@ private fun PercentRow(
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = 0,
             colors = drawerSliderColors(),
+        )
+    }
+    HorizontalDivider(color = DrawerColors.SettingsDivider)
+}
+
+/**
+ * 「最常用」数量输入行（2.9.0）：手动输入显示的应用个数，
+ * 旁边提示当前系统允许输入的最大值 = 本机有使用记录的应用数。
+ */
+@Composable
+private fun FrequentLimitRow(
+    value: Int,
+    maxAllowed: Int,
+    onValue: (Int) -> Unit,
+) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    Column(Modifier.fillMaxWidth().background(DrawerColors.SettingsRow).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Star, null, tint = Color(0xFF8FB4FF))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("最常用数量", color = Color.White, style = WallpaperTextShadowStyle)
+                Text(
+                    "「最常用」分类显示的应用个数，默认 10",
+                    style = WallpaperTextShadowStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize),
+                    color = Color(0xFFBDBDBD),
+                )
+            }
+            OutlinedTextField(
+                value = text,
+                onValueChange = { raw ->
+                    val digits = raw.filter { it.isDigit() }
+                    text = digits
+                    digits.toIntOrNull()?.let { n ->
+                        if (n in 1..maxAllowed) onValue(n.coerceIn(1, maxAllowed))
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                modifier = Modifier.width(90.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = DrawerColors.Accent,
+                    unfocusedBorderColor = Color(0x88FFFFFF),
+                    focusedLabelColor = DrawerColors.Accent,
+                    unfocusedLabelColor = DrawerColors.DialogSecondary,
+                    cursorColor = Color.White,
+                ),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "最多可输入 $maxAllowed（本机有使用记录的应用数）",
+            style = WallpaperTextShadowStyle.copy(fontSize = 12.sp),
+            color = Color(0xFF9E9E9E),
         )
     }
     HorizontalDivider(color = DrawerColors.SettingsDivider)

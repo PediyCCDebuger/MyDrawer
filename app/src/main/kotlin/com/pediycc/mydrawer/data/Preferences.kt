@@ -69,6 +69,13 @@ data class UserPrefs(
     val nestedChildMode: String = NestedChildMode.FRONT,
     /** 手动排序时，父分类里子分类之间的顺序：parentId -> 子分类 id 顺序。 */
     val nestedChildOrders: Map<String, List<String>> = emptyMap(),
+    /**
+     * 2.9.0 新增：多分类附加归属。pkg -> 除主分类外勾选的分类集合，
+     * 同一应用可同时出现在多个分类里调用；主分类仍是 categoryOverrides。
+     */
+    val categoryExtras: Map<String, Set<String>> = emptyMap(),
+    /** 2.9.0 新增：「最常用」分类显示的应用数量上限，默认与原版一致为 10。 */
+    val frequentLimit: Int = 10,
 )
 
 object SortMode {
@@ -262,6 +269,9 @@ class Preferences(context: Context) {
                 categoryIcons = p.categoryIcons - id,
                 categorySortModes = p.categorySortModes - id,
                 manualOrders = p.manualOrders - id,
+                // 多分类附加归属里也要清掉，否则组员集合还指向已删除的分类。
+                categoryExtras = p.categoryExtras.mapValues { (_, set) -> set - id }
+                    .filterValues { it.isNotEmpty() },
             )
         }
     }
@@ -281,6 +291,37 @@ class Preferences(context: Context) {
     /** 设置某父分类下子分类的手动顺序。 */
     fun setNestedChildOrder(parentId: String, order: List<String>) {
         update { p -> p.copy(nestedChildOrders = p.nestedChildOrders + (parentId to order)) }
+    }
+
+    /**
+     * 2.9.0 勾选式多分类：把应用在 [catId] 分类里的归属切换一次。
+     * [primary] 是该应用当前的主分类（来自抽屉列表），归属变化写回 categoryOverrides / categoryExtras。
+     */
+    fun toggleAppCategory(packageName: String, primary: String, catId: String) {
+        update { p ->
+            val extras = p.categoryExtras[packageName] ?: emptySet()
+            val (np, ne) = Categories.toggleMembership(primary, extras, catId)
+            p.copy(
+                categoryOverrides = p.categoryOverrides + (packageName to np),
+                categoryExtras = if (ne.isEmpty()) p.categoryExtras - packageName
+                else p.categoryExtras + (packageName to ne),
+            )
+        }
+    }
+
+    /** 2.9.0 批量勾选：把每个选中应用的分类归属精确设为 [checked]（按勾选顺序）。 */
+    fun setAppMemberships(packageNames: Collection<String>, checked: List<String>) {
+        update { p ->
+            var overrides = p.categoryOverrides
+            var extras = p.categoryExtras
+            packageNames.forEach { pkg ->
+                val primary = overrides[pkg] ?: Categories.OTHER
+                val (np, ne) = Categories.withMemberships(primary, checked)
+                overrides = overrides + (pkg to np)
+                extras = if (ne.isEmpty()) extras - pkg else extras + (pkg to ne)
+            }
+            p.copy(categoryOverrides = overrides, categoryExtras = extras)
+        }
     }
 
     fun setNestedChildMode(mode: String) {
