@@ -404,7 +404,7 @@ fun SettingsScreen(
                 item {
                     SettingsRow(
                         title = "查看调试日志",
-                        subtitle = "最近 300 条记录，可复制 / 保存为文本文件 / 清空",
+                        subtitle = "最近 300 条记录；可复制、保存到「下载/MyDrawer」或清空",
                         icon = Icons.Filled.ReceiptLong,
                         onClick = { debugLogDialog = true },
                     )
@@ -508,7 +508,6 @@ fun SettingsScreen(
     if (debugLogDialog) {
         DebugLogDialog(
             logText = DebugLog.text(context),
-            onNotify = { msg -> vm.notifyUser(msg) },
             onClear = { DebugLog.clear(context) },
             onDismiss = { debugLogDialog = false },
         )
