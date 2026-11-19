@@ -119,15 +119,27 @@ class Preferences(context: Context) {
 
     private fun load(): UserPrefs {
         val raw = prefs.getString(KEY_PREFS, null) ?: return UserPrefs()
-        val loaded = try {
+        var loaded = try {
             json.decodeFromString<UserPrefs>(raw)
         } catch (_: Exception) {
             UserPrefs()
         }
         // 2.1 迁移：移除旧版内置的本机代理 127.0.0.1:1080（那是开发用，普通设备无此服务）。
-        return if (loaded.updateProxy !in Updater.PROXIES) {
-            loaded.copy(updateProxy = Updater.PROXY_DIRECT)
-        } else loaded
+        if (loaded.updateProxy !in Updater.PROXIES) {
+            loaded = loaded.copy(updateProxy = Updater.PROXY_DIRECT)
+        }
+        // 2.9.6 迁移：清掉「未分类」与具体分类共存的旧数据（应用分类后仍留在未分类里的根源），
+        // 修正结果立即落盘，避免每次启动重复计算。
+        val (fixedOverrides, fixedExtras) =
+            Categories.sanitizeMemberships(loaded.categoryOverrides, loaded.categoryExtras)
+        if (fixedOverrides != loaded.categoryOverrides || fixedExtras != loaded.categoryExtras) {
+            loaded = loaded.copy(
+                categoryOverrides = fixedOverrides,
+                categoryExtras = fixedExtras,
+            )
+            prefs.edit().putString(KEY_PREFS, json.encodeToString(loaded)).apply()
+        }
+        return loaded
     }
 
     private fun save() {

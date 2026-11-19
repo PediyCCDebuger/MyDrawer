@@ -187,40 +187,76 @@ object Categories {
 
     /**
      * 勾选 / 取消勾选某分类后的成员集合，返回新的 (主分类, 附加分类)。
-     * 「未分类」只是兜底：从未分类勾选第一个分类时直接把它转为主分类（等同移动到分类）；
-     * 取消主分类时，若有附加分类则顺延一个为主分类，否则回落到「未分类」。
+     * 「未分类」只是兜底，不能与具体分类共存（2.9.6）：
+     * - 从未分类勾选具体分类 → 该分类直接转为主分类，应用随之从未分类里消失；
+     * - 勾选「未分类」→ 清空全部分类归属（等价于移回未分类）；
+     * - 取消主分类时，若有附加分类则顺延一个为主分类，否则回落到「未分类」。
      */
     fun toggleMembership(
         primary: String,
         extras: Set<String>,
         catId: String,
     ): Pair<String, Set<String>> {
-        val isMember = primary == catId || catId in extras
+        // 历史数据里可能把「未分类」混进了附加归属，这里统一剔除。
+        val current = extras - OTHER
+        val isMember = primary == catId || catId in current
         return if (isMember) {
             if (primary == catId) {
-                val rest = extras - catId
+                val rest = current - catId
                 val np = rest.firstOrNull() ?: OTHER
                 np to (rest - np)
             } else {
-                primary to (extras - catId)
+                primary to (current - catId)
             }
         } else {
-            if (primary == OTHER && extras.isEmpty()) catId to extras
-            else primary to (extras + catId)
+            when {
+                catId == OTHER -> OTHER to emptySet()
+                primary == OTHER -> catId to current
+                else -> primary to (current + catId)
+            }
         }
     }
 
     /**
      * 批量勾选：把成员集合精确设为 [checked]（按勾选顺序）。
-     * 原主分类还在勾选里就保持不动，否则顺延勾选里的第一个；没勾任何分类则归入「未分类」。
+     * 「未分类」不能与具体分类共存（2.9.6）：只要勾了具体分类就忽略「未分类」，
+     * 否则会出现「已经在工具里、却还留在未分类一份」的情况。
+     * 原主分类还在生效集合里就保持不动，否则顺延第一个；没勾任何分类则归入「未分类」。
      */
     fun withMemberships(
         primary: String,
         checked: List<String>,
     ): Pair<String, Set<String>> {
-        if (checked.isEmpty()) return OTHER to emptySet()
-        val newPrimary = if (primary in checked) primary else checked.first()
-        return newPrimary to checked.filter { it != newPrimary }.toSet()
+        val concrete = checked.filter { it != OTHER }.distinct()
+        val effective = if (concrete.isNotEmpty()) concrete else checked.distinct()
+        if (effective.isEmpty()) return OTHER to emptySet()
+        val newPrimary = if (primary in effective) primary else effective.first()
+        return newPrimary to effective.filter { it != newPrimary }.toSet()
+    }
+
+    /**
+     * 规范化多分类归属（2.9.6 启动迁移）：清掉附加归属里的「未分类」，
+     * 并把「主分类是未分类、却挂着具体分类」的旧数据提升为主分类——
+     * 这些数据会让应用分类后仍留在「未分类」里多一份。
+     */
+    fun sanitizeMemberships(
+        overrides: Map<String, String>,
+        extras: Map<String, Set<String>>,
+    ): Pair<Map<String, String>, Map<String, Set<String>>> {
+        if (extras.isEmpty()) return overrides to extras
+        val newOverrides = overrides.toMutableMap()
+        val newExtras = linkedMapOf<String, Set<String>>()
+        extras.forEach { (pkg, raw) ->
+            val cleaned = raw.filter { it != OTHER }.distinct()
+            var primary = newOverrides[pkg] ?: OTHER
+            if (primary == OTHER && cleaned.isNotEmpty()) {
+                primary = cleaned.first()
+                newOverrides[pkg] = primary
+            }
+            val rest = cleaned.filter { it != primary }
+            if (rest.isNotEmpty()) newExtras[pkg] = rest.toSet()
+        }
+        return newOverrides to newExtras
     }
 
     /**

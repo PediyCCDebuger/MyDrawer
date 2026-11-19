@@ -322,6 +322,15 @@ fun MoveDialog(
         .map { it.id }
         .toSet()
     var checked by remember { mutableStateOf(initialChecked) }
+    // 2.9.6：「未分类」是兜底项，与具体分类互斥——勾具体分类时自动取消它，
+    // 勾它时清空其它分类（否则应用会既在工具里又留在未分类一份）。
+    fun toggle(id: String) {
+        checked = when {
+            id in checked -> checked - id
+            id == Categories.OTHER -> setOf(Categories.OTHER)
+            else -> (checked - Categories.OTHER) + id
+        }
+    }
     ThemedDialog(onDismissRequest = onDismiss) {
         Text(
             "所属分类（已选 ${selectedPackages.size} 个应用）",
@@ -329,7 +338,8 @@ fun MoveDialog(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "勾选加入、取消勾选移出；同一应用可同时归属多个分类，全部取消则归入「未分类」。",
+            "勾选加入、取消勾选移出；同一应用可同时归属多个分类。" +
+                "勾选具体分类会自动取消「未分类」，勾选「未分类」则清空其它分类。",
             color = DrawerColors.DialogSecondary,
             fontSize = 12.sp,
         )
@@ -344,15 +354,12 @@ fun MoveDialog(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                checked = if (on) checked - cat.id else checked + cat.id
-                            }
+                            .clickable { toggle(cat.id) }
                             .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(checked = on, onCheckedChange = {
-                            checked = if (on) checked - cat.id else checked + cat.id
-                        }, colors = androidx.compose.material3.CheckboxDefaults.colors(
+                        Checkbox(checked = on, onCheckedChange = { toggle(cat.id) },
+                            colors = androidx.compose.material3.CheckboxDefaults.colors(
                             checkedColor = DrawerColors.Accent,
                             uncheckedColor = Color(0x88FFFFFF),
                             checkmarkColor = Color.Black,

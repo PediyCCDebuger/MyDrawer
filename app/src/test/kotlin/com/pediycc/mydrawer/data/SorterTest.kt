@@ -461,4 +461,58 @@ class SorterTest {
         val group = Sorter.groupsWithNested("frequent", apps, p).first()
         assertEquals(listOf("a", "b"), group.apps.map { it.packageName })
     }
+
+    // ---- 2.9.6 未分类与具体分类互斥 ----
+
+    @Test
+    fun `checking a category from other with extras also moves the primary`() {
+        // 旧数据：主分类仍是未分类，但附加归属已有 media —— 再勾 utility 时未分类必须让位。
+        val (primary, extras) = Categories.toggleMembership("other", setOf("media"), "utility")
+        assertEquals("utility", primary)
+        assertEquals(setOf("media"), extras)
+    }
+
+    @Test
+    fun `checking uncategorized clears every category`() {
+        val (p1, e1) = Categories.toggleMembership("utility", setOf("internet", "media"), "other")
+        assertEquals("other", p1)
+        assertEquals(emptySet<String>(), e1)
+        // 勾「未分类」永远不该把 other 塞进附加归属里。
+        val (p2, e2) = Categories.toggleMembership("other", emptySet(), "other")
+        assertEquals("other", p2)
+        assertEquals(emptySet<String>(), e2)
+    }
+
+    @Test
+    fun `legacy extras containing other are cleaned on toggle`() {
+        val (primary, extras) = Categories.toggleMembership("utility", setOf("other", "media"), "media")
+        assertEquals("utility", primary)
+        assertEquals(emptySet<String>(), extras)
+    }
+
+    @Test
+    fun `batch checking drops uncategorized when a real category is checked`() {
+        // 「未分类」固定排在列表最后，勾选工具后 checked = [utility, other]。
+        val (primary, extras) = Categories.withMemberships("other", listOf("utility", "other"))
+        assertEquals("utility", primary)
+        assertEquals(emptySet<String>(), extras)
+        val (p2, e2) = Categories.withMemberships("other", listOf("other"))
+        assertEquals("other", p2)
+        assertEquals(emptySet<String>(), e2)
+    }
+
+    @Test
+    fun `sanitize memberships promotes extras and removes uncategorized`() {
+        val overrides = mapOf("store" to "other", "mail" to "utility")
+        val extras = mapOf(
+            "store" to setOf("internet"),          // 未分类 + 具体分类 → 提升 internet
+            "mail" to setOf("other", "media"),     // 附加里混了未分类 → 清掉
+        )
+        val (ov, ex) = Categories.sanitizeMemberships(overrides, extras)
+        assertEquals("internet", ov["store"])
+        assertEquals("utility", ov["mail"])
+        // store 只剩一个分类，附加归属整条被去掉。
+        assert(!ex.containsKey("store"))
+        assertEquals(setOf("media"), ex["mail"])
+    }
 }
