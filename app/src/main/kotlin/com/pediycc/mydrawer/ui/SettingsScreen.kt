@@ -114,18 +114,18 @@ fun SettingsScreen(
             item {
                 PercentRow(
                     title = "应用图标大小",
-                    subtitle = "调整抽屉里应用图标的显示大小（80%–160%）",
+                    subtitle = "调整抽屉里应用图标的显示大小（80%–200%）",
                     value = prefs.iconSizePercent,
-                    range = 80..160,
+                    range = 80..200,
                     onValue = { v -> vm.updatePrefs { it.copy(iconSizePercent = v) } },
                 )
             }
             item {
                 PercentRow(
                     title = "分类图标大小",
-                    subtitle = "调整左侧分类栏图标的显示大小（80%–160%）",
+                    subtitle = "调整左侧分类栏图标的显示大小（80%–240%）",
                     value = prefs.categoryIconSizePercent,
-                    range = 80..160,
+                    range = 80..240,
                     onValue = { v -> vm.updatePrefs { it.copy(categoryIconSizePercent = v) } },
                 )
             }

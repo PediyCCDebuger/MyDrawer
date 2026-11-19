@@ -280,13 +280,24 @@ fun DrawerScreen(vm: DrawerViewModel) {
                         onNew = { newCategoryDialog = true },
                     )
                 }
+                // 分类栏与应用区之间的细分隔线，进一步明确两区边界。
+                val railDivider: @Composable () -> Unit = {
+                    Spacer(
+                        Modifier
+                            .fillMaxHeight()
+                            .width(1.dp)
+                            .background(DrawerColors.RailDivider),
+                    )
+                }
                 if (state.prefs.leftHanded) {
                     Box(Modifier.weight(1f)) {
                         AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onChildMenu = { menuCategory = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
                     }
+                    railDivider()
                     rail()
                 } else {
                     rail()
+                    railDivider()
                     Box(Modifier.weight(1f)) {
                         AppArea(vm, state, searchOpen = searchOpen, onSearchToggle = { searchOpen = !searchOpen }, onMenu = { menuApp = it }, onChildMenu = { menuCategory = it }, onLaunch = { pkg -> launchAndFinish(pkg) })
                     }
@@ -632,14 +643,16 @@ private fun CategoryRail(
     onLongClick: (String) -> Unit,
     onNew: () -> Unit,
 ) {
-    // 分类图标尺寸独立可调，默认比应用图标大一档。
-    val iconSize = (30 * prefs.categoryIconSizePercent / 100f).coerceIn(20f, 54f).dp
-    val tileSize = (44 * prefs.categoryIconSizePercent / 100f).coerceIn(34f, 58f).dp
-    // 分类栏只比纯黑略浅一档：既能和内容区区分，又不会像白底那样压住白色分类文字。
+    // 分类图标尺寸独立可调，范围 80%–240%；上限放宽到能容纳 240%，不再截断。
+    val iconSize = (30 * prefs.categoryIconSizePercent / 100f).coerceIn(20f, 80f).dp
+    val tileSize = (44 * prefs.categoryIconSizePercent / 100f).coerceIn(34f, 110f).dp
+    // 栏宽随图标放大自适应，避免 240% 时大图标被裁掉；带文字时至少留出文字所需宽度。
+    val railWidth = maxOf(if (prefs.showCategoryLabels) 76f else 64f, tileSize.value + 6f).dp
+    // 略带冷灰蓝的深底，与应用区纯黑拉开，分类里应用多时也能一眼分出边界。
     Column(
         Modifier
             .fillMaxHeight()
-            .width(if (prefs.showCategoryLabels) 76.dp else 64.dp)
+            .width(railWidth)
             .background(DrawerColors.RailBackground)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -903,7 +916,7 @@ private fun AppTile(
     onLongClick: () -> Unit,
 ) {
     val selected = app.packageName in state.selected
-    val iconSize = (40 * state.prefs.iconSizePercent / 100f).coerceIn(24f, 72f).dp
+    val iconSize = (40 * state.prefs.iconSizePercent / 100f).coerceIn(24f, 88f).dp
     Column(
         modifier = modifier
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)

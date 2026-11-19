@@ -43,9 +43,15 @@ object DrawerColors {
     /** 主界面 / 设置页背景：纯黑，不透明。 */
     val AppBackground = Color(0xFF000000)
 
-    /** 左侧分类栏：只比黑略浅，避免大面积白底压住白色分类文字。 */
-    val RailBackground = Color(0xFF151515)
-    val RailSelected = Color(0xFF2E2E2E)
+    /**
+     * 左侧分类栏：略带冷灰蓝的深底，和应用区纯黑拉开一档，
+     * 分类里应用多时也能一眼分出分类栏和内容区；色相克制、不抢图标。
+     */
+    val RailBackground = Color(0xFF1E242B)
+    /** 分类栏当前选中项：同色系再亮一档。 */
+    val RailSelected = Color(0xFF333F4B)
+    /** 分类栏与应用区之间的 1dp 分界线，进一步明确边界。 */
+    val RailDivider = Color(0xFF2B3239)
 
     /** 设置页列表行与分组标题。 */
     val SettingsRow = Color(0xFF101010)
