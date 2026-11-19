@@ -479,14 +479,16 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun moveCategory(categoryId: String, delta: Int) {
-        val ids = Categories.orderedFor(prefs.current)
-            .map { it.id }.toMutableList()
-        val from = ids.indexOf(categoryId)
+        if (categoryId == Categories.OTHER) return
+        val ids = Categories.orderedFor(prefs.current).map { it.id }
+        // 2.9.11：与拖拽排序保持一致——「未分类」不参与换位，始终留在最后。
+        val movable = ids.filterNot { it == Categories.OTHER }
+        val from = movable.indexOf(categoryId)
         if (from < 0) return
-        val to = (from + delta).coerceIn(0, ids.lastIndex)
+        val to = (from + delta).coerceIn(0, movable.lastIndex)
         if (to == from) return
-        java.util.Collections.swap(ids, from, to)
-        prefs.update { it.copy(categoryOrder = ids) }
+        val next = Categories.reorderKeepingLast(ids, from, to)
+        prefs.update { it.copy(categoryOrder = next) }
         _ui.value = _ui.value.copy(prefs = prefs.current)
     }
 

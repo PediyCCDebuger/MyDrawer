@@ -263,11 +263,14 @@ class Preferences(context: Context) {
     fun addCategory(label: String): String {
         val id = "custom_" + System.currentTimeMillis()
         update { p ->
+            // 2.9.11：「未分类」是兜底项，固定排在最后；新建分类要插在它前面，
+            // 不能简单 add 到 categoryOrder 末尾（旧版本就是这样跑到未分类后面的）。
+            val order = Categories.insertBeforeOther(p.categoryOrder, id)
             p.copy(
                 customCategories = p.customCategories + id,
                 categoryLabels = p.categoryLabels + (id to label),
                 categoryIcons = p.categoryIcons + (id to "builtin:apps"),
-                categoryOrder = p.categoryOrder + id,
+                categoryOrder = order,
             )
         }
         return id

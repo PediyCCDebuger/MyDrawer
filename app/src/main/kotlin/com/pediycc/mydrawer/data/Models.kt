@@ -83,7 +83,10 @@ object Categories {
             frequentEnabled -> if (FREQUENT in order) order else listOf(FREQUENT) + order
             else -> order.filter { it != FREQUENT }
         }
-        for (id in sequence) {
+        // 2.9.11：兼容旧数据——过去新建分类会把 id 追加到末尾，可能排在「未分类」之后。
+        // 这里不按 sequence 里的位置取「未分类」，让它留在 remaining 里最后补上，保证永远压末位。
+        val normalized = sequence.filterNot { it == OTHER }
+        for (id in normalized) {
             if (id == FREQUENT) {
                 if (frequentEnabled) out += FREQUENT_DEF
             } else {
@@ -93,7 +96,9 @@ object Categories {
                 }
             }
         }
-        out += remaining
+        // order 里没记录的分类补在后面；「未分类」即使来自 remaining 也必须压到最后。
+        out += remaining.filterNot { it.id == OTHER }
+        out += remaining.filter { it.id == OTHER }
         return out
     }
 
@@ -257,6 +262,16 @@ object Categories {
             if (rest.isNotEmpty()) newExtras[pkg] = rest.toSet()
         }
         return newOverrides to newExtras
+    }
+
+    /**
+     * 新建分类时插入顺序：[id] 放到「未分类」之前；没有未分类（旧数据 / 特殊配置）时追加到末尾。
+     */
+    fun insertBeforeOther(order: List<String>, id: String): List<String> {
+        val out = order.toMutableList()
+        val index = out.indexOf(OTHER)
+        if (index >= 0) out.add(index, id) else out += id
+        return out
     }
 
     /**

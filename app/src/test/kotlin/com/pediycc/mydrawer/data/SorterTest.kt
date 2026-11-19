@@ -94,6 +94,37 @@ class SorterTest {
     }
 
     @Test
+    fun `new category is inserted before uncategorized`() {
+        assertEquals(
+            listOf("games", "custom_new", Categories.OTHER),
+            Categories.insertBeforeOther(listOf("games", Categories.OTHER), "custom_new"),
+        )
+        // 兼容没有未分类项的旧顺序：直接追加即可。
+        assertEquals(
+            listOf("games", "custom_new"),
+            Categories.insertBeforeOther(listOf("games"), "custom_new"),
+        )
+    }
+
+    @Test
+    fun `ordered keeps uncategorized last for legacy saved order`() {
+        val prefs = UserPrefs(
+            frequentEnabled = true,
+            customCategories = listOf("custom_new"),
+            categoryLabels = mapOf("custom_new" to "新分类"),
+            // 2.9.10 及以前新建分类会追加到末尾，于是跑到「未分类」之后。
+            categoryOrder = listOf(
+                Categories.FREQUENT, "games", Categories.OTHER, "custom_new",
+            ),
+        )
+        val ids = Categories.orderedFor(prefs).map { it.id }
+        assertEquals(Categories.OTHER, ids.last())
+        // 旧顺序没记录的内置分类会按既有规则补在后面；新建分类只要在「未分类」之前即可。
+        val customIndex = ids.indexOf("custom_new")
+        assertEquals(true, customIndex in 0 until ids.lastIndex)
+    }
+
+    @Test
     fun `frequent group stays capped at ten even with explicit category sort`() {
         val apps = (1..15).map { app("p$it", "应用$it", "games") }
         val prefs = UserPrefs(
