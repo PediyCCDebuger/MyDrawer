@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -886,23 +887,52 @@ fun NewCategoryDialog(
         ) {
             Text("新建分类", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                label = { Text("名称", color = DrawerColors.DialogSecondary) },
-                textStyle = TextStyle(color = Color.White),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = DrawerColors.Accent,
-                    unfocusedBorderColor = Color(0x88FFFFFF),
-                    focusedLabelColor = DrawerColors.Accent,
-                    unfocusedLabelColor = DrawerColors.DialogSecondary,
-                    cursorColor = Color.White,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 2.9.12：名称框前面直接显示当前选中的图标，点图标网格时这里同步变化，
+                // 不用靠网格里很淡的底色猜有没有选中。
+                val picked = BuiltInIcons.find(iconKey)
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .background(DrawerColors.RailSelected, MaterialTheme.shapes.small)
+                        .border(2.dp, DrawerColors.Accent, MaterialTheme.shapes.small),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (picked != null) {
+                        Icon(
+                            picked.vector,
+                            contentDescription = "已选图标：${picked.label}",
+                            tint = picked.color,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.Apps,
+                            contentDescription = "已选图标",
+                            tint = DrawerColors.DialogSecondary,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    label = { Text("名称", color = DrawerColors.DialogSecondary) },
+                    textStyle = TextStyle(color = Color.White),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = DrawerColors.Accent,
+                        unfocusedBorderColor = Color(0x88FFFFFF),
+                        focusedLabelColor = DrawerColors.Accent,
+                        unfocusedLabelColor = DrawerColors.DialogSecondary,
+                        cursorColor = Color.White,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Spacer(Modifier.height(14.dp))
             Text("分类图标", color = DrawerColors.Accent, style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(6.dp))
@@ -916,8 +946,14 @@ fun NewCategoryDialog(
                             .padding(3.dp)
                             .size(46.dp)
                             .background(
-                                if (entry.key == iconKey) DrawerColors.RailSelected else Color.Transparent,
+                                if (entry.key == iconKey) DrawerColors.Accent.copy(alpha = 0.28f)
+                                else Color.Transparent,
                                 MaterialTheme.shapes.small,
+                            )
+                            .then(
+                                if (entry.key == iconKey) {
+                                    Modifier.border(2.dp, DrawerColors.Accent, MaterialTheme.shapes.small)
+                                } else Modifier,
                             )
                             .clickable { iconKey = entry.key },
                         contentAlignment = Alignment.Center,
@@ -925,8 +961,8 @@ fun NewCategoryDialog(
                         Icon(
                             entry.vector,
                             entry.label,
-                            tint = entry.color,
-                            modifier = Modifier.size(27.dp),
+                            tint = if (entry.key == iconKey) Color.White else entry.color,
+                            modifier = Modifier.size(if (entry.key == iconKey) 30.dp else 27.dp),
                         )
                     }
                 }
