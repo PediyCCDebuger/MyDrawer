@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.pediycc.mydrawer.BuildConfig
 import com.pediycc.mydrawer.data.AppInfo
 import com.pediycc.mydrawer.data.AppRepository
 import com.pediycc.mydrawer.data.BackupManager
@@ -55,6 +56,8 @@ data class DrawerUiState(
      * 返回键优先出栈回到上级分类，栈空才退出抽屉。
      */
     val categoryTrail: List<String> = emptyList(),
+    /** 2.9.7：自动检查发现新版本时，交给界面弹出更新对话框（只提示一次）。 */
+    val autoUpdateRelease: Updater.ReleaseInfo? = null,
 )
 
 class DrawerViewModel(app: Application) : AndroidViewModel(app) {
@@ -797,6 +800,43 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
             )
             onResult(info, if (info == null) "检查更新失败，可更换代理后重试" else null)
         }
+    }
+
+    /**
+     * 2.9.7 自动检查更新：开关默认关闭，开启后进入前台时每 24 小时最多检查一次；
+     * 刚打开开关时用 [force] 立即检查一次。只有确实发现新版本才弹对话框，
+     * 已是最新或网络失败不打扰用户；全过程写调试日志便于排查。
+     */
+    fun checkAutoUpdate(force: Boolean = false) {
+        val p = prefs.current
+        if (!p.autoUpdate) return
+        val now = System.currentTimeMillis()
+        if (!force && !Updater.shouldAutoCheck(true, p.lastAutoUpdateCheck, now)) return
+        // 先记时间戳：即使网络失败，本次会话也不会反复请求。
+        prefs.update { it.copy(lastAutoUpdateCheck = now) }
+        _ui.value = _ui.value.copy(prefs = prefs.current)
+        DebugLog.log(
+            context,
+            "自动检查更新：已发起（间隔 ${Updater.AUTO_CHECK_INTERVAL_MS / 3_600_000} 小时" +
+                "${if (force) "，开关刚开启" else ""}，代理=${p.updateProxy}）",
+        )
+        viewModelScope.launch {
+            val info = Updater.fetchLatest(prefs.current.updateProxy)
+            if (info == null) {
+                DebugLog.log(context, "自动检查更新失败，静默跳过")
+                return@launch
+            }
+            DebugLog.log(context, "自动检查更新完成：远端 ${info.tag}")
+            if (Updater.isNewer(info.tag, BuildConfig.VERSION_NAME)) {
+                DebugLog.log(context, "发现新版本 ${info.tag}，弹出更新对话框")
+                _ui.value = _ui.value.copy(autoUpdateRelease = info)
+            }
+        }
+    }
+
+    /** 用户关掉自动检查弹出的更新对话框。 */
+    fun dismissAutoUpdate() {
+        _ui.value = _ui.value.copy(autoUpdateRelease = null)
     }
 
     /**

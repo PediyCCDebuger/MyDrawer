@@ -357,7 +357,20 @@ fun SettingsScreen(
             }
 
             // ---- 备份 / 更新 ----
-            item { SectionTitle("备份与恢复") }
+            item { SectionTitle("备份与更新") }
+            item {
+                // 2.9.7：默认关闭；开启时立即检查一次，之后进入应用时每 24 小时最多一次。
+                SwitchRow(
+                    title = "自动检查更新",
+                    subtitle = "开启后每 24 小时检查一次，只有发现新版本才弹出提示；默认关闭",
+                    icon = Icons.Filled.Autorenew,
+                    checked = prefs.autoUpdate,
+                    onCheckedChange = { v ->
+                        vm.updatePrefs { it.copy(autoUpdate = v) }
+                        if (v) vm.checkAutoUpdate(force = true)
+                    },
+                )
+            }
             item {
                 SettingsRow(
                     title = "导出配置备份",

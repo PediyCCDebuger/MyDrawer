@@ -27,6 +27,13 @@ object Updater {
 
     const val PROXY_DIRECT = "直连（不使用代理）"
 
+    /** 自动检查更新的间隔：24 小时（与大多数软件「每天检查一次」一致）。 */
+    const val AUTO_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
+
+    /** 是否已到自动检查时间：开关关闭、或距上次检查不足 24 小时都不检查。 */
+    fun shouldAutoCheck(enabled: Boolean, lastCheckAt: Long, now: Long): Boolean =
+        enabled && (lastCheckAt <= 0L || now - lastCheckAt >= AUTO_CHECK_INTERVAL_MS)
+
     data class ReleaseInfo(val tag: String, val apkUrl: String, val apkName: String, val body: String)
 
     /** 下载结果：成功给出文件，失败给出可展示的中文原因。 */

@@ -1049,11 +1049,16 @@ fun IconPickerSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
+fun UpdateDialog(
+    vm: DrawerViewModel,
+    onDismiss: () -> Unit,
+    /** 2.9.7：自动检查已经取到版本信息时直接显示，不再重复请求网络。 */
+    prechecked: Updater.ReleaseInfo? = null,
+) {
     val currentVersion = BuildConfig.VERSION_NAME
-    var info by remember { mutableStateOf<Updater.ReleaseInfo?>(null) }
+    var info by remember { mutableStateOf(prechecked) }
     var error by remember { mutableStateOf<String?>(null) }
-    var checking by remember { mutableStateOf(true) }
+    var checking by remember { mutableStateOf(prechecked == null) }
     var proxyExpanded by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
@@ -1071,7 +1076,7 @@ fun UpdateDialog(vm: DrawerViewModel, onDismiss: () -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) { check() }
+    LaunchedEffect(Unit) { if (prechecked == null) check() }
 
     // 只有远端版本确实更大才算「发现新版本」；相同版本显示已是最新。
     val newVersion = info?.takeIf { Updater.isNewer(it.tag, currentVersion) }

@@ -76,6 +76,10 @@ data class UserPrefs(
     val categoryExtras: Map<String, Set<String>> = emptyMap(),
     /** 2.9.0 新增：「最常用」分类显示的应用数量上限，默认与原版一致为 10。 */
     val frequentLimit: Int = 10,
+    /** 2.9.7 新增：自动检查更新开关，默认关闭；开启后每 24 小时检查一次。 */
+    val autoUpdate: Boolean = false,
+    /** 2.9.7 新增：上次自动检查更新的时间戳（毫秒），随配置备份一起保存。 */
+    val lastAutoUpdateCheck: Long = 0L,
 )
 
 object SortMode {

@@ -515,4 +515,19 @@ class SorterTest {
         assert(!ex.containsKey("store"))
         assertEquals(setOf("media"), ex["mail"])
     }
+
+    // ---- 2.9.7 自动检查更新节流 ----
+
+    @Test
+    fun `auto update check respects the 24 hour interval`() {
+        val day = Updater.AUTO_CHECK_INTERVAL_MS
+        // 默认关闭 / 从未检查过。
+        assert(!Updater.shouldAutoCheck(false, 0L, 10 * day))
+        assert(Updater.shouldAutoCheck(true, 0L, System.currentTimeMillis()))
+        // 不足 24 小时跳过，满 24 小时才检查。
+        assert(!Updater.shouldAutoCheck(true, 1000L, 1000L + day - 1))
+        assert(Updater.shouldAutoCheck(true, 1000L, 1000L + day))
+        // 设备时间被改到过去时不重复请求。
+        assert(!Updater.shouldAutoCheck(true, 5000L, 1000L))
+    }
 }

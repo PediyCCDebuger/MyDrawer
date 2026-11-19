@@ -3,6 +3,8 @@ package com.pediycc.mydrawer.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -139,6 +141,11 @@ fun DrawerScreen(vm: DrawerViewModel) {
         if (!state.prefs.usagePromptShown && !UsageStatsHelper.hasPermission(context)) {
             showUsagePrompt = true
         }
+    }
+
+    // 2.9.7：回到前台时自动检查更新；开关关闭或距上次检查不足 24 小时，VM 会直接跳过。
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.checkAutoUpdate()
     }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -326,6 +333,15 @@ fun DrawerScreen(vm: DrawerViewModel) {
 
     if (showUpdate) {
         UpdateDialog(vm = vm, onDismiss = { showUpdate = false })
+    } else {
+        // 自动检查发现新版本：沿用同一个对话框，直接显示已经取到的版本信息，不再请求网络。
+        state.autoUpdateRelease?.let { release ->
+            UpdateDialog(
+                vm = vm,
+                prechecked = release,
+                onDismiss = { vm.dismissAutoUpdate() },
+            )
+        }
     }
 
     menuApp?.let { captured ->
