@@ -422,6 +422,14 @@ fun SettingsScreen(
                         onClick = { debugLogDialog = true },
                     )
                 }
+                item {
+                    SettingsRow(
+                        title = "重建应用列表缓存",
+                        subtitle = "启动加速用的缓存；图标或名称显示异常时点此强制重扫本机应用",
+                        icon = Icons.Filled.Cached,
+                        onClick = { vm.rebuildAppCache() },
+                    )
+                }
             }
             item {
                 Text(

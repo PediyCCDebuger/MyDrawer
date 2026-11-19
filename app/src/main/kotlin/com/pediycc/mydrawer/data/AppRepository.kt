@@ -3,7 +3,10 @@ package com.pediycc.mydrawer.data
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -28,41 +31,117 @@ class AppRepository(
         val unlisted: List<UnlistedApp>,
     )
 
+    /**
+     * 2.9.8：包签名 → 已还原的「原始列表」，进程内复用，避免同一次使用里反复读盘解码图标。
+     * 原始列表只含与用户设置无关的事实（包名 / 系统原名 / 分类规则 / 安装时间 / 图标 /
+     * 有无桌面入口），每次 refresh 再套用当前 prefs，故改分类、改名都能即时生效。
+     * 签名变化（装/卸/更新应用、切语言）时作废重建。仅内存，不跨进程。
+     */
+    private var memorySignature: String? = null
+    private var memoryRaw: List<AppInfo>? = null
+
     suspend fun loadApps(): LoadResult = withContext(Dispatchers.IO) {
+        val startMs = System.currentTimeMillis()
         val packages = pm.getInstalledPackages(0)
+        val signature = AppCache.signatureOf(packages)
+
+        val raw: List<AppInfo>
+        val fromCache: Boolean
+        if (memorySignature == signature && memoryRaw != null) {
+            raw = memoryRaw!!
+            fromCache = true
+        } else {
+            val snap = AppCache.load(context, signature)
+            if (snap != null) {
+                // 命中磁盘缓存：图标读 PNG，不再逐包 loadIcon（这是启动转圈的主因）。
+                raw = snap.apps.map { c ->
+                    val icon: Drawable? =
+                        AppCache.loadBitmap(context, c.packageName)?.let { BitmapDrawable(context.resources, it) }
+                            ?: runCatching { originalIcon(c.packageName) }.getOrNull()
+                    AppInfo(
+                        packageName = c.packageName,
+                        label = c.label,
+                        icon = icon,
+                        isSystem = c.isSystem,
+                        // 缓存里存的是分类规则结果；删除分类在下方按 prefs 兜底到「未分类」。
+                        categoryId = c.categoryId,
+                        installTime = c.installTime,
+                        hasLauncher = c.hasLauncher,
+                    )
+                }
+                fromCache = true
+            } else {
+                // 未命中：全量扫描系统并写缓存，只在首次启动 / 应用有增删时走一次。
+                raw = scanAndCache(packages, signature)
+                fromCache = false
+            }
+            memorySignature = signature
+            memoryRaw = raw
+        }
+
+        // 套用用户设置：重命名、分类覆盖 / 删除分类兜底、无桌面入口过滤。
+        // 这些放在缓存还原之后，改设置无需作废缓存。
+        val p = prefs.current
+        val result = mutableListOf<AppInfo>()
+        val unlisted = mutableListOf<UnlistedApp>()
+        for (app in raw) {
+            val label = p.appLabels[app.packageName] ?: app.label
+            if (!app.hasLauncher && !p.showSystemApps) {
+                unlisted += UnlistedApp(app.packageName, label)
+                continue
+            }
+            val classified = p.categoryOverrides[app.packageName] ?: app.categoryId
+            val categoryId = if (classified in p.deletedCategories) Categories.OTHER else classified
+            result += app.copy(label = label, categoryId = categoryId)
+        }
+
+        DebugLog.log(
+            context,
+            "载入应用：${if (fromCache) "缓存" else "全量扫描"}，列出 ${result.size}，" +
+                "本机安装 ${packages.size}，无桌面入口未列出 ${unlisted.size}，" +
+                "耗时 ${System.currentTimeMillis() - startMs}ms",
+        )
+        LoadResult(result, packages.size, unlisted.sortedWith(compareBy { it.label }))
+    }
+
+    /**
+     * 全量扫描 + 写缓存。逐包 loadLabel / loadIcon 的慢路径，只在没有可用缓存时执行。
+     * 返回「全部包」的原始 AppInfo（含无桌面入口的），过滤交给调用方按 prefs 完成。
+     */
+    private fun scanAndCache(
+        packages: List<PackageInfo>,
+        signature: String,
+    ): List<AppInfo> {
         // 系统抽屉里真正能看到的程序 = 声明了 MAIN + LAUNCHER 且处于启用状态的活动。
-        // 注意不能用 getLaunchIntentForPackage：它会先匹配 CATEGORY_INFO，
-        // 于是「系统跟踪」「开关控制」这类没有桌面入口、只有设置页的系统应用也会被当成可见，
-        // 结果就是 MyDrawer 里多出一堆系统抽屉里根本没有的条目。
+        // 不用 getLaunchIntentForPackage：它会先匹配 CATEGORY_INFO，于是「系统跟踪」「开关控制」
+        // 这类只有设置页的系统应用也会被当成可见，比系统抽屉多出一堆条目。
         val launcherPackages: Set<String> = runCatching {
             pm.queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
                 0,
             ).mapNotNull { it.activityInfo?.packageName }.toSet()
         }.getOrDefault(emptySet())
+
         val result = mutableListOf<AppInfo>()
-        val unlisted = mutableListOf<UnlistedApp>()
+        val cachedApps = mutableListOf<AppCache.CachedApp>()
+        val icons = mutableMapOf<String, Drawable?>()
         for (pkg in packages) {
             val appInfo: ApplicationInfo = pkg.applicationInfo ?: continue
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-            val label = prefs.current.appLabels[pkg.packageName]
-                ?: runCatching { appInfo.loadLabel(pm).toString() }
-                    .getOrDefault(pkg.packageName)
-            // 与系统抽屉一致：有桌面入口的（浏览器 / 应用商店 / 相机等）始终列出；
-            // 没有入口的（系统跟踪、开关控制等纯系统进程）默认隐藏，由「显示系统应用」开关控制。
+            val label = runCatching { appInfo.loadLabel(pm).toString() }
+                .getOrDefault(pkg.packageName)
             val hasLauncher = pkg.packageName in launcherPackages
-            if (!hasLauncher && !prefs.current.showSystemApps) {
-                // 记录下来而不是悄悄丢掉：设置页可以展示「少了哪几个」，便于核对数量。
-                unlisted += UnlistedApp(pkg.packageName, label)
-                continue
-            }
-
+            val categoryId = catalog.classify(pkg.packageName)
+            cachedApps += AppCache.CachedApp(
+                packageName = pkg.packageName,
+                label = label,
+                isSystem = isSystem,
+                categoryId = categoryId,
+                installTime = pkg.firstInstallTime,
+                hasLauncher = hasLauncher,
+            )
             val icon = runCatching { appInfo.loadIcon(pm) }.getOrNull()
-            val classified = prefs.current.categoryOverrides[pkg.packageName]
-                ?: catalog.classify(pkg.packageName)
-            // 分类被删除后，原本落在其中的应用统一回落到「未分类」，避免变成看不见的孤儿应用。
-            val categoryId = if (classified in prefs.current.deletedCategories) Categories.OTHER else classified
-
+            icons[pkg.packageName] = icon
             result += AppInfo(
                 packageName = pkg.packageName,
                 label = label,
@@ -73,7 +152,19 @@ class AppRepository(
                 hasLauncher = hasLauncher,
             )
         }
-        LoadResult(result, packages.size, unlisted.sortedWith(compareBy { it.label }))
+        AppCache.save(
+            context,
+            AppCache.Snapshot(AppCache.VERSION, signature, cachedApps, packages.size),
+            icons,
+        )
+        return result
+    }
+
+    /** 缓存图标文件丢失时，用系统图标兜底单个应用（不会退化成全量扫描）。 */
+    private fun originalIcon(packageName: String): Drawable? = try {
+        pm.getApplicationInfo(packageName, 0).loadIcon(pm)
+    } catch (e: Exception) {
+        null
     }
 
     /** 返回某个应用原始（系统提供的）名称与图标，供「恢复默认 / 首选原图标」使用。 */

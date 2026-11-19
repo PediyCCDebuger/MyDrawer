@@ -530,4 +530,30 @@ class SorterTest {
         // 设备时间被改到过去时不重复请求。
         assert(!Updater.shouldAutoCheck(true, 5000L, 1000L))
     }
+
+    // ---- 2.9.8 应用列表缓存签名 ----
+
+    private fun pkg(name: String, install: Long, update: Long): android.content.pm.PackageInfo =
+        android.content.pm.PackageInfo().apply {
+            packageName = name
+            firstInstallTime = install
+            lastUpdateTime = update
+        }
+
+    @Test
+    fun `cache signature is stable for identical package sets`() {
+        val a = listOf(pkg("com.b", 100, 100), pkg("com.a", 200, 300))
+        val b = listOf(pkg("com.a", 200, 300), pkg("com.b", 100, 100))
+        // 顺序不同也应得到同一签名（内部排序）。
+        assertEquals(AppCache.signatureOf(a), AppCache.signatureOf(b))
+    }
+
+    @Test
+    fun `cache signature changes when a package is added or updated`() {
+        val base = listOf(pkg("com.a", 200, 300))
+        val added = base + pkg("com.b", 100, 100)
+        val updated = listOf(pkg("com.a", 200, 999))
+        assert(AppCache.signatureOf(base) != AppCache.signatureOf(added))
+        assert(AppCache.signatureOf(base) != AppCache.signatureOf(updated))
+    }
 }

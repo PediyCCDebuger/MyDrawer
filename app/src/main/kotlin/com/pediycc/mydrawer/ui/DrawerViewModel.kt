@@ -12,6 +12,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pediycc.mydrawer.BuildConfig
+import com.pediycc.mydrawer.data.AppCache
 import com.pediycc.mydrawer.data.AppInfo
 import com.pediycc.mydrawer.data.AppRepository
 import com.pediycc.mydrawer.data.BackupManager
@@ -107,6 +108,19 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
                 unlistedApps = loaded.unlisted,
                 categoryTrail = Categories.sanitizeTrail(_ui.value.categoryTrail, validIds),
             )
+        }
+    }
+
+    /**
+     * 2.9.8：清空应用列表缓存并重建。安装/卸载应用会自动让缓存失效，
+     * 这里给用户在图标异常、名称从不正确的旧缓存还原等情况下一个手动强制刷新的入口。
+     */
+    fun rebuildAppCache() {
+        viewModelScope.launch {
+            AppCache.clear(context)
+            DebugLog.log(context, "手动清空应用列表缓存，开始全量重建")
+            refresh()
+            notify("应用列表缓存已重建")
         }
     }
 
