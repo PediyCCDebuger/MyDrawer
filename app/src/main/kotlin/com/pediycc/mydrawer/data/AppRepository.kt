@@ -7,7 +7,10 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 负责读取全部已安装应用并结合规则表/用户覆盖给出分类与显示名。 */
@@ -37,8 +40,20 @@ class AppRepository(
      * 有无桌面入口），每次 refresh 再套用当前 prefs，故改分类、改名都能即时生效。
      * 签名变化（装/卸/更新应用、切语言）时作废重建。仅内存，不跨进程。
      */
+    @Volatile
     private var memorySignature: String? = null
+
+    @Volatile
     private var memoryRaw: List<AppInfo>? = null
+
+    /** 2.9.10：后台建缓存用的独立作用域；只写磁盘缓存，不持有界面引用。 */
+    private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 手动重建缓存时连进程内那份一起失效，否则点完「重建」其实仍走内存缓存、磁盘缓存根本没重建。 */
+    fun invalidateMemory() {
+        memorySignature = null
+        memoryRaw = null
+    }
 
     suspend fun loadApps(): LoadResult = withContext(Dispatchers.IO) {
         val startMs = System.currentTimeMillis()
@@ -71,9 +86,12 @@ class AppRepository(
                 }
                 fromCache = true
             } else {
-                // 未命中：全量扫描系统并写缓存，只在首次启动 / 应用有增删时走一次。
-                raw = scanAndCache(packages, signature)
+                // 2.9.10：未命中时只做「首屏够用」的扫描（可见应用才读图标），
+                // 建缓存（全部包读图标 + PNG 编码 + 原子落盘）移到后台，不再挡启动。
+                val fast = scanForUi(packages)
+                raw = fast.raw
                 fromCache = false
+                scheduleCacheBuild(packages, signature, fast.cachedApps)
             }
             memorySignature = signature
             memoryRaw = raw
@@ -92,44 +110,59 @@ class AppRepository(
             }
             val classified = p.categoryOverrides[app.packageName] ?: app.categoryId
             val categoryId = if (classified in p.deletedCategories) Categories.OTHER else classified
-            result += app.copy(label = label, categoryId = categoryId)
+            // 首屏快扫没读隐藏的系统应用图标；用户中途开启「显示系统应用」时按需补，避免出现一片默认图标。
+            val icon = if (app.icon == null) originalIcon(app.packageName) else app.icon
+            result += app.copy(label = label, icon = icon, categoryId = categoryId)
         }
 
         DebugLog.log(
             context,
-            "载入应用：${if (fromCache) "缓存" else "全量扫描"}，列出 ${result.size}，" +
+            "载入应用：${if (fromCache) "缓存" else "首次扫描（缓存后台建立）"}，列出 ${result.size}，" +
                 "本机安装 ${packages.size}，无桌面入口未列出 ${unlisted.size}，" +
                 "耗时 ${System.currentTimeMillis() - startMs}ms",
         )
         LoadResult(result, packages.size, unlisted.sortedWith(compareBy { it.label }))
     }
 
+    private data class FastScanResult(
+        val raw: List<AppInfo>,
+        val cachedApps: List<AppCache.CachedApp>,
+    )
+
     /**
-     * 全量扫描 + 写缓存。逐包 loadLabel / loadIcon 的慢路径，只在没有可用缓存时执行。
-     * 返回「全部包」的原始 AppInfo（含无桌面入口的），过滤交给调用方按 prefs 完成。
+     * 2.9.10：缓存未命中时的首屏扫描。与 2.9.9 的「全量扫描 + 写缓存」区别：
+     * - 所有包都读取元数据（名称 / 系统标志 / 桌面入口 / 安装时间 / 默认分类），
+     *   这些是构建完整缓存也需要的，不重复做；
+     * - 只有「当前会显示」的应用才读图标；无桌面入口且未开启「显示系统应用」的
+     *   372 个包不再逐个 loadIcon，这正是首屏多花一两秒的地方；
+     * - 不写 PNG、不搬目录，编码与落盘全部交给 [scheduleCacheBuild] 在后台完成。
      */
-    private fun scanAndCache(
-        packages: List<PackageInfo>,
-        signature: String,
-    ): List<AppInfo> {
+    private fun scanForUi(packages: List<PackageInfo>): FastScanResult {
+        val scanStartMs = System.currentTimeMillis()
         // 系统抽屉里真正能看到的程序 = 声明了 MAIN + LAUNCHER 且处于启用状态的活动。
         // 不用 getLaunchIntentForPackage：它会先匹配 CATEGORY_INFO，于是「系统跟踪」「开关控制」
         // 这类只有设置页的系统应用也会被当成可见，比系统抽屉多出一堆条目。
+        val launcherStartMs = System.currentTimeMillis()
         val launcherPackages: Set<String> = runCatching {
             pm.queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
                 0,
             ).mapNotNull { it.activityInfo?.packageName }.toSet()
         }.getOrDefault(emptySet())
+        val launcherMs = System.currentTimeMillis() - launcherStartMs
 
+        val showSystem = prefs.current.showSystemApps
         val result = mutableListOf<AppInfo>()
         val cachedApps = mutableListOf<AppCache.CachedApp>()
-        val icons = mutableMapOf<String, Drawable?>()
+        var labelMs = 0L
+        var iconMs = 0L
         for (pkg in packages) {
             val appInfo: ApplicationInfo = pkg.applicationInfo ?: continue
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            val labelStartMs = System.currentTimeMillis()
             val label = runCatching { appInfo.loadLabel(pm).toString() }
                 .getOrDefault(pkg.packageName)
+            labelMs += System.currentTimeMillis() - labelStartMs
             val hasLauncher = pkg.packageName in launcherPackages
             val categoryId = catalog.classify(pkg.packageName)
             cachedApps += AppCache.CachedApp(
@@ -140,8 +173,15 @@ class AppRepository(
                 installTime = pkg.firstInstallTime,
                 hasLauncher = hasLauncher,
             )
-            val icon = runCatching { appInfo.loadIcon(pm) }.getOrNull()
-            icons[pkg.packageName] = icon
+            // 只在应用会出现在抽屉里时读图标；其余留给后台建缓存，或打开「显示系统应用」时按需补。
+            val icon = if (hasLauncher || showSystem) {
+                val iconStartMs = System.currentTimeMillis()
+                val value = runCatching { appInfo.loadIcon(pm) }.getOrNull()
+                iconMs += System.currentTimeMillis() - iconStartMs
+                value
+            } else {
+                null
+            }
             result += AppInfo(
                 packageName = pkg.packageName,
                 label = label,
@@ -152,12 +192,54 @@ class AppRepository(
                 hasLauncher = hasLauncher,
             )
         }
-        AppCache.save(
+        val totalMs = System.currentTimeMillis() - scanStartMs
+        DebugLog.log(
             context,
-            AppCache.Snapshot(AppCache.VERSION, signature, cachedApps, packages.size),
-            icons,
+            "首次扫描明细：桌面入口 ${launcherMs}ms，读取名称 ${labelMs}ms，" +
+                "可见应用图标 ${iconMs}ms，包信息 ${(totalMs - launcherMs - labelMs - iconMs).coerceAtLeast(0)}ms",
         )
-        return result
+        return FastScanResult(result, cachedApps)
+    }
+
+    /**
+     * 2.9.10：后台把完整缓存写出来。首屏数据已经交给界面，这里再慢也不影响启动。
+     * 图标写前 / 写后各校验一次包签名：期间发生了安装 / 卸载 / 更新 / 语言切换就放弃，
+     * 避免把过期数据写成有效缓存（下一次启动会重新扫描）。
+     */
+    private fun scheduleCacheBuild(
+        packages: List<PackageInfo>,
+        signature: String,
+        cachedApps: List<AppCache.CachedApp>,
+    ) {
+        cacheScope.launch {
+            val startMs = System.currentTimeMillis()
+            try {
+                if (AppCache.signatureOf(pm.getInstalledPackages(0)) != signature) {
+                    DebugLog.log(context, "后台建立缓存跳过：应用列表已变化")
+                    return@launch
+                }
+                val icons = HashMap<String, Drawable?>(packages.size)
+                for (pkg in packages) {
+                    val appInfo = pkg.applicationInfo ?: continue
+                    icons[pkg.packageName] = runCatching { appInfo.loadIcon(pm) }.getOrNull()
+                }
+                if (AppCache.signatureOf(pm.getInstalledPackages(0)) != signature) {
+                    DebugLog.log(context, "后台建立缓存跳过：读取图标期间应用列表已变化")
+                    return@launch
+                }
+                AppCache.save(
+                    context,
+                    AppCache.Snapshot(AppCache.VERSION, signature, cachedApps, packages.size),
+                    icons,
+                )
+                DebugLog.log(
+                    context,
+                    "后台建立应用列表缓存：${icons.size} 个图标，耗时 ${System.currentTimeMillis() - startMs}ms",
+                )
+            } catch (e: Exception) {
+                DebugLog.log(context, "后台建立缓存失败：${e.message}")
+            }
+        }
     }
 
     /**

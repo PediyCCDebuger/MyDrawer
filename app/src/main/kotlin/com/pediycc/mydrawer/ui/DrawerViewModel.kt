@@ -184,10 +184,13 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun rebuildAppCache() {
         viewModelScope.launch {
+            // 2.9.10：连进程内缓存一起清掉。之前只清磁盘，refresh 仍命中内存，
+            // 结果是「点了重建却没重建」，要杀进程重启才会真正全量扫描。
+            repo.invalidateMemory()
             AppCache.clear(context)
-            DebugLog.log(context, "手动清空应用列表缓存，开始全量重建")
+            DebugLog.log(context, "手动清空应用列表缓存，开始重新扫描（缓存在后台重建）")
             refresh()
-            notify("应用列表缓存已重建")
+            notify("应用列表已重新扫描，缓存正在后台重建")
         }
     }
 

@@ -360,7 +360,7 @@ fun SettingsScreen(
                 // 正常情况下装/卸/更新应用或切换语言会自动重建，这里只作显示异常时的手动兜底。
                 SettingsRow(
                     title = "重建应用列表缓存",
-                    subtitle = "图标或名称显示异常时点此强制重扫本机应用；平时无需使用，应用变化会自动更新",
+                    subtitle = "图标或名称显示异常时点此强制重扫本机应用，缓存随后在后台重建；平时无需使用，应用变化会自动更新",
                     icon = Icons.Filled.Cached,
                     onClick = { vm.rebuildAppCache() },
                 )
