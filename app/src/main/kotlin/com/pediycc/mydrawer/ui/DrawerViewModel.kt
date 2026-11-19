@@ -1,8 +1,10 @@
 package com.pediycc.mydrawer.ui
 
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
@@ -31,8 +33,11 @@ import com.pediycc.mydrawer.data.UserPrefs
 import com.pediycc.mydrawer.data.inCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class DrawerUiState(
     val apps: List<AppInfo> = emptyList(),
@@ -74,7 +79,65 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     )
     val ui: StateFlow<DrawerUiState> = _ui.asStateFlow()
 
-    init { refresh() }
+    /** 2.9.9：动态注册的系统变化监听，退出时注销。 */
+    private val packageWatchers = mutableListOf<BroadcastReceiver>()
+    private var lastPackageEventMs = 0L
+
+    init {
+        refresh()
+        // 2.9.9：应用安装 / 卸载 / 更新、系统语言切换时立即刷新，避免停留在旧图标 / 漏掉新应用。
+        // 抽屉应用使用时在前台，动态注册即可；签名机制会自动让旧缓存失效并全量重建。
+        val pkgReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) {
+                onSystemAppChange(intent.action ?: "package")
+            }
+        }
+        val pkgFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        runCatching {
+            context.registerReceiver(pkgReceiver, pkgFilter)
+            packageWatchers += pkgReceiver
+        }
+        val localeReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) { onSystemAppChange("locale") }
+        }
+        runCatching {
+            context.registerReceiver(localeReceiver, IntentFilter(Intent.ACTION_LOCALE_CHANGED))
+            packageWatchers += localeReceiver
+        }
+    }
+
+    /**
+     * 一次安装 / 卸载可能连发多个广播，600ms 内合并为一次刷新，避免重复全量扫描。
+     */
+    private fun onSystemAppChange(action: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastPackageEventMs < 600L) return
+        lastPackageEventMs = now
+        DebugLog.log(context, "检测到系统变化（$action），刷新应用列表")
+        refresh()
+    }
+
+    /** 回到抽屉时用签名校验应用是否有过变化（覆盖广播未送达 / 进程被杀期间的变化）。 */
+    fun refreshIfPackageChanged() {
+        viewModelScope.launch {
+            val changed = withContext(Dispatchers.IO) { repo.signatureChanged() }
+            if (changed) {
+                DebugLog.log(context, "返回抽屉：检测到应用列表变化，刷新")
+                refresh()
+            }
+        }
+    }
+
+    override fun onCleared() {
+        packageWatchers.forEach { receiver -> runCatching { context.unregisterReceiver(receiver) } }
+        packageWatchers.clear()
+        super.onCleared()
+    }
 
     /**
      * 启动时进入的分类：startupCategory 为空则沿用 lastCategory（上次使用的分类），
@@ -86,9 +149,13 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true)
-            val loaded = repo.loadApps()
+            // 2.9.9：应用列表与使用统计并行读取，且 usage 挪到 IO 线程（原本在主线程阻塞）。
+            // 后者需要查询系统使用情况数据库，可能较慢；两者无依赖，并行可缩短启动等待。
+            val appsDeferred = async(Dispatchers.IO) { repo.loadApps() }
+            val usageDeferred = async(Dispatchers.IO) { UsageStatsHelper.load(context) }
+            val loaded = appsDeferred.await()
             val apps = loaded.apps
-            val usage = UsageStatsHelper.load(context)
+            val usage = usageDeferred.await()
             DebugLog.log(
                 context,
                 "载入应用：当前列出 ${apps.size}，本机安装 ${loaded.totalInstalled}，无桌面入口未列出 ${loaded.unlisted.size}，" +
@@ -127,7 +194,8 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
     /** 从系统「使用情况访问权限」设置页返回后重新读取真实使用频率。 */
     fun reloadUsage() {
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(usageCounts = UsageStatsHelper.load(context))
+            val usage = withContext(Dispatchers.IO) { UsageStatsHelper.load(context) }
+            _ui.value = _ui.value.copy(usageCounts = usage)
         }
     }
 

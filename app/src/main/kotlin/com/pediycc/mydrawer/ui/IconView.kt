@@ -97,11 +97,14 @@ fun DrawerIcon(
 
 private fun android.graphics.drawable.Drawable.toBitmapSafe(): android.graphics.Bitmap =
     try {
-        val out = android.graphics.Bitmap.createBitmap(128, 128, android.graphics.Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(out)
-        setBounds(0, 0, 128, 128)
-        draw(canvas)
-        out
+        // 2.9.9：缓存还原 / file: 图标本身就是位图，直接复用，省掉每屏一次 128×128 canvas 绘制。
+        if (this is android.graphics.drawable.BitmapDrawable) bitmap else {
+            val out = android.graphics.Bitmap.createBitmap(128, 128, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(out)
+            setBounds(0, 0, 128, 128)
+            draw(canvas)
+            out
+        }
     } catch (e: Exception) {
         android.graphics.Bitmap.createBitmap(128, 128, android.graphics.Bitmap.Config.ARGB_8888)
     }

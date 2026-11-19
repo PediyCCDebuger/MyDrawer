@@ -355,6 +355,16 @@ fun SettingsScreen(
                     onCheckedChange = { v -> vm.updatePrefs { it.copy(showMenuButton = v) } },
                 )
             }
+            item {
+                // 2.9.9：从调试区移到常规「程序列表」区，所有用户都能找到。
+                // 正常情况下装/卸/更新应用或切换语言会自动重建，这里只作显示异常时的手动兜底。
+                SettingsRow(
+                    title = "重建应用列表缓存",
+                    subtitle = "图标或名称显示异常时点此强制重扫本机应用；平时无需使用，应用变化会自动更新",
+                    icon = Icons.Filled.Cached,
+                    onClick = { vm.rebuildAppCache() },
+                )
+            }
 
             // ---- 备份 / 更新 ----
             item { SectionTitle("备份与更新") }
@@ -420,14 +430,6 @@ fun SettingsScreen(
                         subtitle = "最近 300 条记录；可复制、保存到「下载/MyDrawer」或清空",
                         icon = Icons.Filled.ReceiptLong,
                         onClick = { debugLogDialog = true },
-                    )
-                }
-                item {
-                    SettingsRow(
-                        title = "重建应用列表缓存",
-                        subtitle = "启动加速用的缓存；图标或名称显示异常时点此强制重扫本机应用",
-                        icon = Icons.Filled.Cached,
-                        onClick = { vm.rebuildAppCache() },
                     )
                 }
             }

@@ -160,6 +160,16 @@ class AppRepository(
         return result
     }
 
+    /**
+     * 2.9.9：当前系统包签名是否与上次载入时不同。用于回到抽屉时快速判断是否发生了
+     * 安装 / 卸载 / 更新 / 语言切换。调用方应放到 IO 线程。
+     */
+    fun signatureChanged(): Boolean {
+        val last = memorySignature ?: return false  // 尚未载入过，交由 refresh 处理
+        val current = AppCache.signatureOf(pm.getInstalledPackages(0))
+        return current != last
+    }
+
     /** 缓存图标文件丢失时，用系统图标兜底单个应用（不会退化成全量扫描）。 */
     private fun originalIcon(packageName: String): Drawable? = try {
         pm.getApplicationInfo(packageName, 0).loadIcon(pm)

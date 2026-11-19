@@ -26,5 +26,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // 用户可能刚从系统「使用情况访问权限」页返回，重新读取真实使用频率。
         drawerVm?.reloadUsage()
+        // 2.9.9：进程在后台期间若有应用增删 / 更新 / 语言切换，回到抽屉时按签名校验并刷新。
+        drawerVm?.refreshIfPackageChanged()
     }
 }

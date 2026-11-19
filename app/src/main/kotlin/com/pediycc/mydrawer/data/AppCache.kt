@@ -33,6 +33,8 @@ object AppCache {
     const val VERSION = 1
 
     private const val DIR = "appcache"
+    private const val TMP_DIR = "appcache_tmp"
+    private const val BACKUP_DIR = "appcache_old"
     private const val ICON_DIR = "icons"
     private const val SNAPSHOT_FILE = "snapshot.json"
     private const val ICON_SIZE = 192
@@ -87,26 +89,44 @@ object AppCache {
         null
     }
 
-    /** 写入缓存：先重建图标目录（清掉已卸载应用的残留 png），再写元数据。 */
+    /**
+     * 原子写入缓存：先全部写进临时目录，成功后再整体切换，避免写入中途被杀 / 断电
+     * 留下「snapshot 是新的一批、图标只写了一半」的不一致缓存（那会让部分应用显示成默认图标）。
+     * 步骤：写 tmp → 旧目录改名 old → tmp 改名正式 → 删 old。任何一步失败都保留旧缓存。
+     */
     fun save(context: Context, snapshot: Snapshot, icons: Map<String, Drawable?>) {
+        val filesDir = context.filesDir
+        val tmp = File(filesDir, TMP_DIR)
+        val old = File(filesDir, BACKUP_DIR)
+        val live = File(filesDir, DIR)
         try {
-            val dir = baseDir(context)
-            if (!dir.exists()) dir.mkdirs()
-            val iDir = iconsDir(context)
-            if (iDir.exists()) iDir.listFiles()?.forEach { runCatching { it.delete() } }
-            if (!iDir.exists()) iDir.mkdirs()
+            runCatching { tmp.deleteRecursively() }
+            if (!tmp.mkdirs()) return
+            val tmpIcons = File(tmp, ICON_DIR)
+            if (!tmpIcons.mkdirs()) return
             icons.forEach { (pkg, drawable) ->
                 if (drawable == null) return@forEach
                 val bmp = toBitmap(drawable) ?: return@forEach
                 runCatching {
-                    iconFile(context, pkg).outputStream().use { out ->
+                    File(tmpIcons, "$pkg.png").outputStream().use { out ->
                         bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
                     }
                 }
             }
-            File(dir, SNAPSHOT_FILE).writeText(json.encodeToString(snapshot), Charsets.UTF_8)
+            File(tmp, SNAPSHOT_FILE).writeText(json.encodeToString(snapshot), Charsets.UTF_8)
+
+            // 切换：先移走旧目录 → tmp 上位 → 删除旧目录。
+            runCatching { old.deleteRecursively() }
+            if (live.exists() && !live.renameTo(old)) return
+            if (!tmp.renameTo(live)) {
+                // 上位失败：把旧目录还原，保证正式目录仍可用。
+                if (old.exists()) runCatching { old.renameTo(live) }
+                return
+            }
+            runCatching { old.deleteRecursively() }
         } catch (e: Exception) {
-            // 缓存写失败不影响本次结果。
+            // 缓存写失败不影响本次结果；清理临时目录，下次重新全量扫描再写。
+            runCatching { tmp.deleteRecursively() }
         }
     }
 
@@ -118,7 +138,10 @@ object AppCache {
     }
 
     fun clear(context: Context) {
-        runCatching { baseDir(context).deleteRecursively() }
+        val filesDir = context.filesDir
+        listOf(DIR, TMP_DIR, BACKUP_DIR).forEach { name ->
+            runCatching { File(filesDir, name).deleteRecursively() }
+        }
     }
 
     /** Drawable → 定长画布位图，兼容自适应图标 / 矢量图；失败返回 null。 */

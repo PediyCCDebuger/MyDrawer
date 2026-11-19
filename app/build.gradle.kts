@@ -23,8 +23,8 @@ android {
     applicationId = "com.pediycc.mydrawer"
     minSdk = 26
     targetSdk = 37
-    versionCode = 23
-    versionName = "2.9.8"
+    versionCode = 24
+    versionName = "2.9.9"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
