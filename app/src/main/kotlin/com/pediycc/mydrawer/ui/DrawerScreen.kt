@@ -158,19 +158,13 @@ fun DrawerScreen(vm: DrawerViewModel) {
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { u -> iconTarget?.let { vm.setCustomIcon(u, it) } } }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    state.message?.let { msg ->
-        LaunchedEffect(msg) {
-            snackbarHostState.showSnackbar(msg)
-            vm.consumeMessage()
-        }
-    }
+    // 2.9.14：提示统一走系统 Toast（见 DrawerViewModel.notify），不再用主界面 Snackbar——
+    // 后者会被设置页 / 对话框 / 长按菜单等覆盖层挡住，必须关掉覆盖层才看得到。
 
     // 2.3.0：固定纯黑不透明背景，不再透壁纸（透壁纸会导致滚动时整片重影）。
     Box(Modifier.fillMaxSize().background(DrawerColors.AppBackground)) {
         Scaffold(
             containerColor = DrawerColors.AppBackground,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),

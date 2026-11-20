@@ -10,6 +10,7 @@ import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -45,7 +46,6 @@ data class DrawerUiState(
     val query: String = "",
     val prefs: UserPrefs = UserPrefs(),
     val loading: Boolean = true,
-    val message: String? = null,
     /** 多选模式与已选包。 */
     val selectMode: Boolean = false,
     val selected: Set<String> = emptySet(),
@@ -974,12 +974,16 @@ class DrawerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun consumeMessage() {
-        _ui.value = _ui.value.copy(message = null)
-    }
-
+    /**
+     * 统一提示：走系统 Toast，而不是主界面 Scaffold 的 Snackbar。
+     * Snackbar 属于主界面窗口，会被设置页 / 对话框 / 长按菜单等覆盖层挡住，
+     * 用户必须关掉覆盖层才看得到（与调试日志对话框当初的问题同源）。
+     * Toast 是浮在所有窗口之上的系统层，任何界面下点操作都能立即看到。
+     * 较长的提示（如失败原因）用长时长，避免一闪而过。
+     */
     private fun notify(msg: String) {
-        _ui.value = _ui.value.copy(message = msg)
+        val duration = if (msg.length > 24) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+        Toast.makeText(context, msg, duration).show()
     }
 
     /** 供界面层主动下发提示（如卸载诊断信息）。 */
