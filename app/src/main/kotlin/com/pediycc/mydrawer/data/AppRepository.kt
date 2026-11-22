@@ -67,31 +67,30 @@ class AppRepository(
             fromCache = true
         } else {
             val snap = AppCache.load(context, signature)
-            if (snap != null) {
-                // 命中磁盘缓存：图标读 PNG，不再逐包 loadIcon（这是启动转圈的主因）。
-                raw = snap.apps.map { c ->
-                    val icon: Drawable? =
-                        AppCache.loadBitmap(context, c.packageName)?.let { BitmapDrawable(context.resources, it) }
-                            ?: runCatching { originalIcon(c.packageName) }.getOrNull()
-                    AppInfo(
-                        packageName = c.packageName,
-                        label = c.label,
-                        icon = icon,
-                        isSystem = c.isSystem,
-                        // 缓存里存的是分类规则结果；删除分类在下方按 prefs 兜底到「未分类」。
-                        categoryId = c.categoryId,
-                        installTime = c.installTime,
-                        hasLauncher = c.hasLauncher,
-                    )
+            when {
+                snap != null -> {
+                    // 签名完全一致：命中磁盘缓存，图标读 PNG，不再逐包 loadIcon（启动转圈的主因）。
+                    raw = restoreFromSnapshot(snap)
+                    fromCache = true
                 }
-                fromCache = true
-            } else {
-                // 2.9.10：未命中时只做「首屏够用」的扫描（可见应用才读图标），
-                // 建缓存（全部包读图标 + PNG 编码 + 原子落盘）移到后台，不再挡启动。
-                val fast = scanForUi(packages)
-                raw = fast.raw
-                fromCache = false
-                scheduleCacheBuild(packages, signature, fast.cachedApps)
+                // 2.9.15：签名变了（装/卸/更新应用），但语言没变时，绝大多数包其实没动。
+                // 复用旧缓存里未变动包的名字 / 分类 / 图标，只前台重读真正变化的少数包，
+                // 避免每次装个应用就把整份缓存作废、冷启动在前台全量扫描。完整快照仍后台重建。
+                else -> {
+                    val reusable = AppCache.loadForReuse(context)
+                    if (reusable != null && AppCache.localePart(reusable.signature) == AppCache.localePart(signature)) {
+                        val inc = incrementalRebuild(packages, reusable)
+                        raw = inc.raw
+                        fromCache = true
+                        scheduleCacheBuild(packages, signature, inc.cachedApps)
+                    } else {
+                        // 没有旧缓存，或切换了系统语言（所有名字都要更新）：首屏快扫 + 后台建缓存。
+                        val fast = scanForUi(packages)
+                        raw = fast.raw
+                        fromCache = false
+                        scheduleCacheBuild(packages, signature, fast.cachedApps)
+                    }
+                }
             }
             memorySignature = signature
             memoryRaw = raw
@@ -128,6 +127,109 @@ class AppRepository(
         val raw: List<AppInfo>,
         val cachedApps: List<AppCache.CachedApp>,
     )
+
+    /** 从完整快照还原原始列表：图标读 PNG，缺失时用系统图标兜底。 */
+    private fun restoreFromSnapshot(snap: AppCache.Snapshot): List<AppInfo> =
+        snap.apps.map { c ->
+            val icon: Drawable? =
+                AppCache.loadBitmap(context, c.packageName)?.let { BitmapDrawable(context.resources, it) }
+                    ?: runCatching { originalIcon(c.packageName) }.getOrNull()
+            AppInfo(
+                packageName = c.packageName,
+                label = c.label,
+                icon = icon,
+                isSystem = c.isSystem,
+                // 缓存里存的是分类规则结果；删除分类在下方按 prefs 兜底到「未分类」。
+                categoryId = c.categoryId,
+                installTime = c.installTime,
+                hasLauncher = c.hasLauncher,
+            )
+        }
+
+    /**
+     * 2.9.15：签名变化后的增量重建。语言未变时，逐个包比对 firstInstallTime / lastUpdateTime：
+     * - 未变动的包（绝大多数）：名字 / 分类 / 系统标志 / 桌面入口直接取自旧快照，图标读旧 PNG，
+     *   不做任何跨进程 loadLabel / loadIcon；
+     * - 真正变动的包（新装 / 更新）：才现场读一次，数量通常个位数；
+     * - 被卸载的包不在当前 packages 里，自然消失。
+     * 返回完整列表（供本次显示）与新的元数据列表（供后台按新签名重写缓存）。
+     */
+    private fun incrementalRebuild(
+        packages: List<PackageInfo>,
+        old: AppCache.Snapshot,
+    ): FastScanResult {
+        val startMs = System.currentTimeMillis()
+        val oldByPkg = old.apps.associateBy { it.packageName }
+        val showSystem = prefs.current.showSystemApps
+        val result = mutableListOf<AppInfo>()
+        val cachedApps = mutableListOf<AppCache.CachedApp>()
+        var reused = 0
+        var rescanned = 0
+        // 只有变动的包才需要判断桌面入口；复用包直接用快照里的 hasLauncher，省掉这次查询。
+        var launcherPackages: Set<String>? = null
+        for (pkg in packages) {
+            val appInfo: ApplicationInfo = pkg.applicationInfo ?: continue
+            val cached = oldByPkg[pkg.packageName]
+            val unchanged = AppCache.canReuse(cached, pkg.firstInstallTime, pkg.lastUpdateTime)
+            if (unchanged) {
+                reused++
+                val icon: Drawable? =
+                    AppCache.loadBitmap(context, pkg.packageName)?.let { BitmapDrawable(context.resources, it) }
+                        ?: runCatching { originalIcon(pkg.packageName) }.getOrNull()
+                result += AppInfo(
+                    packageName = cached!!.packageName,
+                    label = cached.label,
+                    icon = icon,
+                    isSystem = cached.isSystem,
+                    categoryId = cached.categoryId,
+                    installTime = cached.installTime,
+                    hasLauncher = cached.hasLauncher,
+                )
+                cachedApps += cached
+            } else {
+                rescanned++
+                if (launcherPackages == null) {
+                    launcherPackages = runCatching {
+                        pm.queryIntentActivities(
+                            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+                            0,
+                        ).mapNotNull { it.activityInfo?.packageName }.toSet()
+                    }.getOrDefault(emptySet())
+                }
+                val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val label = runCatching { appInfo.loadLabel(pm).toString() }.getOrDefault(pkg.packageName)
+                val hasLauncher = pkg.packageName in launcherPackages!!
+                val categoryId = catalog.classify(pkg.packageName)
+                val icon = if (hasLauncher || showSystem) {
+                    runCatching { appInfo.loadIcon(pm) }.getOrNull()
+                } else null
+                cachedApps += AppCache.CachedApp(
+                    packageName = pkg.packageName,
+                    label = label,
+                    isSystem = isSystem,
+                    categoryId = categoryId,
+                    installTime = pkg.firstInstallTime,
+                    lastUpdateTime = pkg.lastUpdateTime,
+                    hasLauncher = hasLauncher,
+                )
+                result += AppInfo(
+                    packageName = pkg.packageName,
+                    label = label,
+                    icon = icon,
+                    isSystem = isSystem,
+                    categoryId = categoryId,
+                    installTime = pkg.firstInstallTime,
+                    hasLauncher = hasLauncher,
+                )
+            }
+        }
+        DebugLog.log(
+            context,
+            "增量载入：复用 ${reused} 个，重读 ${rescanned} 个（装/卸/更新），" +
+                "耗时 ${System.currentTimeMillis() - startMs}ms",
+        )
+        return FastScanResult(result, cachedApps)
+    }
 
     /**
      * 2.9.10：缓存未命中时的首屏扫描。与 2.9.9 的「全量扫描 + 写缓存」区别：
@@ -171,6 +273,7 @@ class AppRepository(
                 isSystem = isSystem,
                 categoryId = categoryId,
                 installTime = pkg.firstInstallTime,
+                lastUpdateTime = pkg.lastUpdateTime,
                 hasLauncher = hasLauncher,
             )
             // 只在应用会出现在抽屉里时读图标；其余留给后台建缓存，或打开「显示系统应用」时按需补。

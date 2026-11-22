@@ -30,7 +30,7 @@ import java.util.Locale
  */
 object AppCache {
     /** 缓存结构版本：字段或图标规格变化时 +1，让旧缓存自动失效。 */
-    const val VERSION = 1
+    const val VERSION = 2
 
     private const val DIR = "appcache"
     private const val TMP_DIR = "appcache_tmp"
@@ -49,6 +49,8 @@ object AppCache {
         /** 分类规则表给出的默认分类（用户覆盖 / 删除分类在读取时用 prefs 修正）。 */
         val categoryId: String,
         val installTime: Long,
+        /** 最后更新时间：与 installTime 一起判断某个应用是被更新还是仅装/卸了别的应用。 */
+        val lastUpdateTime: Long,
         val hasLauncher: Boolean,
     )
 
@@ -80,11 +82,37 @@ object AppCache {
         return sb.toString()
     }
 
+    /** 取签名里的语言部分，用于判断是否为语言切换（名称需全量更新，不能增量复用）。 */
+    fun localePart(signature: String): String =
+        signature.substringAfter("|locale=", "").substringBefore("|")
+
+    /**
+     * 某个包能否复用旧缓存：首次安装时间与最后更新时间都没变才算未变动。
+     * 更新时间变化说明应用被更新（图标 / 名称可能变），必须现场重读。
+     */
+    fun canReuse(cached: CachedApp?, firstInstallTime: Long, lastUpdateTime: Long): Boolean =
+        cached != null && cached.installTime == firstInstallTime && cached.lastUpdateTime == lastUpdateTime
+
     /** 读取缓存；签名 / 版本不符、内容为空或任何异常都返回 null（调用方回退全量扫描）。 */
     fun load(context: Context, signature: String): Snapshot? = try {
         val raw = File(baseDir(context), SNAPSHOT_FILE).readText()
         val snap = json.decodeFromString<Snapshot>(raw)
         if (snap.version == VERSION && snap.signature == signature && snap.apps.isNotEmpty()) snap else null
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * 2.9.15：读取旧快照用于「增量复用」——只校验版本、不校验包签名。
+     * 安装 / 卸载 / 更新任一应用都会让签名变化，若因此整份缓存作废，下次冷启动就要在前台
+     * 对全部包逐个 loadLabel / loadIcon（几百毫秒到数秒，被用户感知为「启动很慢」）。
+     * 实际上绝大多数包没变，可继续用这里缓存的名字 / 分类 / 图标，只重读少数变化的包。
+     * 签名不同也能安全复用：具体哪个包变了，由 [AppRepository] 逐包比对时间戳决定。
+     */
+    fun loadForReuse(context: Context): Snapshot? = try {
+        val raw = File(baseDir(context), SNAPSHOT_FILE).readText()
+        val snap = json.decodeFromString<Snapshot>(raw)
+        if (snap.version == VERSION && snap.apps.isNotEmpty()) snap else null
     } catch (e: Exception) {
         null
     }
